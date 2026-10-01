@@ -135,11 +135,26 @@ function MenuPage() {
 
         setTable(tableData);
 
-        // Simpan data meja
-        localStorage.setItem(
-          "restaurantTable",
-          JSON.stringify(response)
-        );
+localStorage.setItem(
+  "restaurantTable",
+  JSON.stringify(response)
+);
+
+localStorage.setItem(
+  "restaurantSlug",
+  restaurantSlug
+);
+
+localStorage.setItem(
+  "restaurantTableCode",
+  tableCode
+);
+
+localStorage.setItem(
+  "menuReturnUrl",
+  `/menu/${restaurantSlug}?table=${tableCode}`
+);
+
       } catch (error) {
         console.error(
           "Gagal mengambil data meja:",

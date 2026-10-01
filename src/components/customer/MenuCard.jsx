@@ -1,9 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 
-function MenuCard({ menu }) {
+function MenuCard({ menu, restaurantSlug }) {
   return (
     <Link
-      to={`/menu/${menu.id}`}
+      to={`/menu/${restaurantSlug}/${menu.id}`}
       className="text-decoration-none"
     >
       <div className="menu-card">
@@ -28,17 +28,23 @@ function MenuCard({ menu }) {
           </h5>
 
           <p className="menu-card-description">
-            {menu.description || 'Menu lezat pilihan kami.'}
+            {menu.description ||
+              "Menu lezat pilihan kami."}
           </p>
 
           {/* HARGA + TOMBOL */}
           <div className="menu-card-bottom">
             <span className="menu-card-price">
-              Rp {Number(menu.price).toLocaleString('id-ID')}
+              Rp{" "}
+              {Number(menu.price).toLocaleString(
+                "id-ID"
+              )}
             </span>
 
             <span className="menu-card-button">
-              <span className="menu-card-plus">+</span>
+              <span className="menu-card-plus">
+                +
+              </span>
             </span>
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 
 import {
-  getCategories,
+  getAdminCategories,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -16,15 +16,27 @@ function CategoryPage() {
   const [loading, setLoading] = useState(true);
 
   // ==================================================
+  // RESTORAN AKTIF
+  // ==================================================
+
+  const [activeRestaurant, setActiveRestaurant] =
+    useState(null);
+
+  // ==================================================
   // TAMBAH KATEGORI
   // ==================================================
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [showAddModal, setShowAddModal] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [formError, setFormError] =
+    useState("");
 
   const [formData, setFormData] = useState({
-    restaurant_id: 4,
+    restaurant_id: "",
     name: "",
     slug: "",
     description: "",
@@ -35,13 +47,20 @@ function CategoryPage() {
   // EDIT KATEGORI
   // ==================================================
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState("");
+  const [showEditModal, setShowEditModal] =
+    useState(false);
+
+  const [editingCategory, setEditingCategory] =
+    useState(null);
+
+  const [editSaving, setEditSaving] =
+    useState(false);
+
+  const [editError, setEditError] =
+    useState("");
 
   const [editFormData, setEditFormData] = useState({
-    restaurant_id: 4,
+    restaurant_id: "",
     name: "",
     slug: "",
     description: "",
@@ -52,71 +71,424 @@ function CategoryPage() {
   // HAPUS KATEGORI
   // ==================================================
 
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] =
+    useState(false);
+
+  // ==================================================
+  // AMBIL RESTORAN AKTIF
+  // ==================================================
+
+  const getActiveRestaurant = () => {
+    // ==================================================
+    // 1. PRIORITAS UTAMA:
+    //    ADMIN USER YANG SEDANG LOGIN
+    // ==================================================
+
+    const savedUser =
+      localStorage.getItem("adminUser");
+
+    if (savedUser) {
+      try {
+        const adminUser =
+          JSON.parse(savedUser);
+
+        if (adminUser?.restaurant_id) {
+          let restaurant = null;
+
+          // Ambil data restaurant jika ada
+          const savedRestaurant =
+            localStorage.getItem(
+              "adminRestaurant"
+            );
+
+          if (savedRestaurant) {
+            try {
+              const parsedRestaurant =
+                JSON.parse(
+                  savedRestaurant
+                );
+
+              // Hanya gunakan data restaurant
+              // jika ID-nya sama dengan akun admin
+              if (
+                Number(
+                  parsedRestaurant?.id
+                ) ===
+                Number(
+                  adminUser.restaurant_id
+                )
+              ) {
+                restaurant =
+                  parsedRestaurant;
+              }
+            } catch (error) {
+              console.error(
+                "Gagal membaca adminRestaurant:",
+                error
+              );
+            }
+          }
+
+          return {
+            id: Number(
+              adminUser.restaurant_id
+            ),
+            name:
+              restaurant?.name ||
+              adminUser?.restaurant?.name ||
+              "Restoran",
+          };
+        }
+      } catch (error) {
+        console.error(
+          "Gagal membaca adminUser:",
+          error
+        );
+      }
+    }
+
+    // ==================================================
+    // 2. FALLBACK:
+    //    ADMIN RESTAURANT
+    // ==================================================
+
+    const savedRestaurant =
+      localStorage.getItem(
+        "adminRestaurant"
+      );
+
+    if (savedRestaurant) {
+      try {
+        const restaurant =
+          JSON.parse(
+            savedRestaurant
+          );
+
+        if (restaurant?.id) {
+          return {
+            ...restaurant,
+            id: Number(
+              restaurant.id
+            ),
+          };
+        }
+      } catch (error) {
+        console.error(
+          "Gagal membaca adminRestaurant:",
+          error
+        );
+      }
+    }
+
+    return null;
+  };
 
   // ==================================================
   // LOAD DATA
   // ==================================================
 
   useEffect(() => {
-    loadCategories();
+    const restaurant =
+      getActiveRestaurant();
+
+    console.log(
+      "================================="
+    );
+
+    console.log(
+      "Restoran aktif CategoryPage:",
+      restaurant
+    );
+
+    console.log(
+      "Admin User:",
+      JSON.parse(
+        localStorage.getItem(
+          "adminUser"
+        ) || "null"
+      )
+    );
+
+    console.log(
+      "Admin Restaurant:",
+      JSON.parse(
+        localStorage.getItem(
+          "adminRestaurant"
+        ) || "null"
+      )
+    );
+
+    console.log(
+      "================================="
+    );
+
+    setActiveRestaurant(
+      restaurant
+    );
+
+    loadCategories(
+      restaurant
+    );
   }, []);
 
-  const loadCategories = async () => {
+  const loadCategories = async (
+    restaurant = getActiveRestaurant()
+  ) => {
     try {
       setLoading(true);
 
-      // Ambil kategori dan menu secara bersamaan
-      const [categoryResponse, menuResponse] =
-        await Promise.all([
-          getCategories(),
-          getAdminMenus(),
-        ]);
+      // ==================================================
+      // CEK RESTORAN AKTIF
+      // ==================================================
 
-      console.log("Data kategori:", categoryResponse);
-      console.log("Data menu:", menuResponse);
+      if (!restaurant?.id) {
+        console.error(
+          "Restaurant ID tidak ditemukan."
+        );
 
-      // =========================
+        setCategories([]);
+        setMenus([]);
+
+        return;
+      }
+
+      const restaurantId =
+        Number(restaurant.id);
+
+      console.log(
+        "Restaurant ID yang digunakan CategoryPage:",
+        restaurantId
+      );
+
+      // ==================================================
+      // AMBIL KATEGORI DAN MENU
+      // ==================================================
+
+      const [
+        categoryResponse,
+        menuResponse,
+      ] = await Promise.all([
+        getAdminCategories(),
+        getAdminMenus(),
+      ]);
+
+      console.log(
+        "Data kategori dari API:",
+        categoryResponse
+      );
+
+      console.log(
+        "Data menu dari API:",
+        menuResponse
+      );
+
+      // ==================================================
       // NORMALISASI DATA KATEGORI
-      // =========================
+      // ==================================================
 
       let categoryData = [];
 
-      if (Array.isArray(categoryResponse)) {
-        categoryData = categoryResponse;
-      } else if (Array.isArray(categoryResponse?.data)) {
-        categoryData = categoryResponse.data;
-      } else {
-        categoryData = [];
+      if (
+        Array.isArray(
+          categoryResponse
+        )
+      ) {
+        categoryData =
+          categoryResponse;
+      } else if (
+        Array.isArray(
+          categoryResponse?.data
+        )
+      ) {
+        categoryData =
+          categoryResponse.data;
+      } else if (
+        Array.isArray(
+          categoryResponse?.categories
+        )
+      ) {
+        categoryData =
+          categoryResponse.categories;
+      } else if (
+        Array.isArray(
+          categoryResponse?.data?.data
+        )
+      ) {
+        categoryData =
+          categoryResponse.data.data;
+      } else if (
+        Array.isArray(
+          categoryResponse?.data?.categories
+        )
+      ) {
+        categoryData =
+          categoryResponse.data.categories;
       }
 
-      // =========================
+      // ==================================================
       // NORMALISASI DATA MENU
-      // =========================
+      // ==================================================
 
       let menuData = [];
 
-      if (Array.isArray(menuResponse)) {
-        menuData = menuResponse;
-      } else if (Array.isArray(menuResponse?.data)) {
-        menuData = menuResponse.data;
-      } else if (Array.isArray(menuResponse?.menus)) {
-        menuData = menuResponse.menus;
-      } else if (Array.isArray(menuResponse?.data?.data)) {
-        menuData = menuResponse.data.data;
-      } else if (Array.isArray(menuResponse?.data?.menus)) {
-        menuData = menuResponse.data.menus;
-      } else {
-        menuData = [];
+      if (
+        Array.isArray(
+          menuResponse
+        )
+      ) {
+        menuData =
+          menuResponse;
+      } else if (
+        Array.isArray(
+          menuResponse?.data
+        )
+      ) {
+        menuData =
+          menuResponse.data;
+      } else if (
+        Array.isArray(
+          menuResponse?.menus
+        )
+      ) {
+        menuData =
+          menuResponse.menus;
+      } else if (
+        Array.isArray(
+          menuResponse?.data?.data
+        )
+      ) {
+        menuData =
+          menuResponse.data.data;
+      } else if (
+        Array.isArray(
+          menuResponse?.data?.menus
+        )
+      ) {
+        menuData =
+          menuResponse.data.menus;
       }
 
-      console.log("Kategori setelah diproses:", categoryData);
-      console.log("Menu setelah diproses:", menuData);
+      // ==================================================
+      // FILTER KATEGORI
+      // BERDASARKAN RESTORAN AKTIF
+      // ==================================================
 
-      setCategories(categoryData);
-      setMenus(menuData);
+      const filteredCategories =
+        categoryData.filter(
+          (category) => {
+            const categoryRestaurantId =
+              category?.restaurant_id ??
+              category?.restaurant?.id;
+
+            // Jika data kategori mempunyai
+            // restaurant_id, wajib cocok.
+            if (
+              categoryRestaurantId !==
+                undefined &&
+              categoryRestaurantId !==
+                null
+            ) {
+              return (
+                Number(
+                  categoryRestaurantId
+                ) ===
+                restaurantId
+              );
+            }
+
+            // Kalau endpoint admin sudah
+            // melakukan scope restoran dan
+            // restaurant_id tidak dikirim,
+            // tetap tampilkan data tersebut.
+            return true;
+          }
+        );
+
+      // ==================================================
+      // FILTER MENU
+      // BERDASARKAN RESTORAN AKTIF
+      // ==================================================
+
+      const filteredMenus =
+        menuData.filter(
+          (menu) => {
+            const menuRestaurantId =
+              menu?.restaurant_id ??
+              menu?.restaurant?.id;
+
+            if (
+              menuRestaurantId !==
+                undefined &&
+              menuRestaurantId !==
+                null
+            ) {
+              return (
+                Number(
+                  menuRestaurantId
+                ) ===
+                restaurantId
+              );
+            }
+
+            // Kalau endpoint admin sudah
+            // melakukan scope restoran,
+            // tetap gunakan data tersebut.
+            return true;
+          }
+        );
+
+      // ==================================================
+      // HASIL FILTER
+      // ==================================================
+
+      console.log(
+        "================================="
+      );
+
+      console.log(
+        "Restaurant ID aktif:",
+        restaurantId
+      );
+
+      console.log(
+        "Kategori setelah filter:",
+        filteredCategories
+      );
+
+      console.log(
+        "Jumlah kategori:",
+        filteredCategories.length
+      );
+
+      console.log(
+        "Menu setelah filter:",
+        filteredMenus
+      );
+
+      console.log(
+        "Jumlah menu:",
+        filteredMenus.length
+      );
+
+      console.log(
+        "================================="
+      );
+
+      setCategories(
+        filteredCategories
+      );
+
+      setMenus(
+        filteredMenus
+      );
     } catch (error) {
-      console.error("Gagal mengambil data:", error);
+      console.error(
+        "Gagal mengambil data:",
+        error
+      );
+
+      setCategories([]);
+      setMenus([]);
 
       alert(
         "Gagal mengambil data kategori dan menu."
@@ -130,59 +502,96 @@ function CategoryPage() {
   // GENERATE SLUG
   // ==================================================
 
-  const generateSlug = (value) => {
+  const generateSlug = (
+    value
+  ) => {
     return value
       .toLowerCase()
       .trim()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-");
+      .replace(
+        /[^a-z0-9\s-]/g,
+        ""
+      )
+      .replace(
+        /\s+/g,
+        "-"
+      )
+      .replace(
+        /-+/g,
+        "-"
+      );
   };
 
   // ==================================================
   // FORM TAMBAH
   // ==================================================
 
-  const handleFormChange = (event) => {
-    const { name, value } = event.target;
+  const handleFormChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } = event.target;
 
-    if (name === "name") {
-      setFormData((currentData) => ({
-        ...currentData,
-        name: value,
-        slug: generateSlug(value),
-      }));
+    if (
+      name === "name"
+    ) {
+      setFormData(
+        (currentData) => ({
+          ...currentData,
+          name: value,
+          slug: generateSlug(
+            value
+          ),
+        })
+      );
 
       return;
     }
 
-    setFormData((currentData) => ({
-      ...currentData,
-      [name]: value,
-    }));
+    setFormData(
+      (currentData) => ({
+        ...currentData,
+        [name]: value,
+      })
+    );
   };
 
   // ==================================================
   // FORM EDIT
   // ==================================================
 
-  const handleEditFormChange = (event) => {
-    const { name, value } = event.target;
+  const handleEditFormChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } = event.target;
 
-    if (name === "name") {
-      setEditFormData((currentData) => ({
-        ...currentData,
-        name: value,
-        slug: generateSlug(value),
-      }));
+    if (
+      name === "name"
+    ) {
+      setEditFormData(
+        (currentData) => ({
+          ...currentData,
+          name: value,
+          slug: generateSlug(
+            value
+          ),
+        })
+      );
 
       return;
     }
 
-    setEditFormData((currentData) => ({
-      ...currentData,
-      [name]: value,
-    }));
+    setEditFormData(
+      (currentData) => ({
+        ...currentData,
+        [name]: value,
+      })
+    );
   };
 
   // ==================================================
@@ -190,12 +599,31 @@ function CategoryPage() {
   // ==================================================
 
   const handleOpenAddModal = () => {
+    const restaurant =
+      getActiveRestaurant();
+
+    if (!restaurant?.id) {
+      alert(
+        "Restoran aktif tidak ditemukan."
+      );
+
+      return;
+    }
+
+    setActiveRestaurant(
+      restaurant
+    );
+
     setFormData({
-      restaurant_id: 4,
+      restaurant_id:
+        Number(
+          restaurant.id
+        ),
       name: "",
       slug: "",
       description: "",
-      sort_order: categories.length + 1,
+      sort_order:
+        categories.length + 1,
     });
 
     setFormError("");
@@ -217,102 +645,182 @@ function CategoryPage() {
   // SIMPAN KATEGORI
   // ==================================================
 
-  const handleCreateCategory = async (event) => {
-    event.preventDefault();
+  const handleCreateCategory =
+    async (event) => {
+      event.preventDefault();
 
-    setFormError("");
+      setFormError("");
 
-    if (!formData.name.trim()) {
-      setFormError("Nama kategori wajib diisi.");
-      return;
-    }
+      // Ambil restoran terbaru
+      const restaurant =
+        getActiveRestaurant();
 
-    if (!formData.slug.trim()) {
-      setFormError("Slug kategori wajib diisi.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const categoryData = {
-        restaurant_id: Number(formData.restaurant_id),
-        name: formData.name.trim(),
-        slug: formData.slug.trim(),
-        description: formData.description.trim(),
-        sort_order: Number(formData.sort_order),
-      };
-
-      console.log(
-        "Data kategori yang ditambahkan:",
-        categoryData
-      );
-
-      await createCategory(categoryData);
-
-      setShowAddModal(false);
-
-      setFormData({
-        restaurant_id: 4,
-        name: "",
-        slug: "",
-        description: "",
-        sort_order: 0,
-      });
-
-      await loadCategories();
-
-      alert("Kategori berhasil ditambahkan.");
-    } catch (error) {
-      console.error(
-        "Gagal menambahkan kategori:",
-        error
-      );
-
-      if (error.response?.data?.errors) {
-        const errors = error.response.data.errors;
-
-        const firstError = Object.values(errors)
-          .flat()
-          .find(Boolean);
-
+      if (!restaurant?.id) {
         setFormError(
-          firstError ||
-            "Data kategori tidak valid."
+          "Restoran aktif tidak ditemukan."
         );
-      } else if (error.response?.data?.message) {
-        setFormError(
-          error.response.data.message
-        );
-      } else {
-        setFormError(
-          "Gagal menambahkan kategori. Silakan coba lagi."
-        );
+
+        return;
       }
-    } finally {
-      setSaving(false);
-    }
-  };
+
+      if (
+        !formData.name.trim()
+      ) {
+        setFormError(
+          "Nama kategori wajib diisi."
+        );
+
+        return;
+      }
+
+      if (
+        !formData.slug.trim()
+      ) {
+        setFormError(
+          "Slug kategori wajib diisi."
+        );
+
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        // Jangan percaya restaurant_id
+        // dari form.
+        // Gunakan restaurant yang sedang login.
+        const categoryData = {
+          restaurant_id:
+            Number(
+              restaurant.id
+            ),
+
+          name:
+            formData.name.trim(),
+
+          slug:
+            formData.slug.trim(),
+
+          description:
+            formData.description.trim(),
+
+          sort_order:
+            Number(
+              formData.sort_order
+            ),
+        };
+
+        console.log(
+          "Data kategori yang ditambahkan:",
+          categoryData
+        );
+
+        await createCategory(
+          categoryData
+        );
+
+        setShowAddModal(false);
+
+        setFormData({
+          restaurant_id:
+            Number(
+              restaurant.id
+            ),
+          name: "",
+          slug: "",
+          description: "",
+          sort_order: 0,
+        });
+
+        await loadCategories(
+          restaurant
+        );
+
+        alert(
+          "Kategori berhasil ditambahkan."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal menambahkan kategori:",
+          error
+        );
+
+        if (
+          error.response?.data
+            ?.errors
+        ) {
+          const errors =
+            error.response.data
+              .errors;
+
+          const firstError =
+            Object.values(errors)
+              .flat()
+              .find(Boolean);
+
+          setFormError(
+            firstError ||
+              "Data kategori tidak valid."
+          );
+        } else if (
+          error.response?.data
+            ?.message
+        ) {
+          setFormError(
+            error.response.data
+              .message
+          );
+        } else {
+          setFormError(
+            "Gagal menambahkan kategori. Silakan coba lagi."
+          );
+        }
+      } finally {
+        setSaving(false);
+      }
+    };
 
   // ==================================================
   // BUKA MODAL EDIT
   // ==================================================
 
-  const handleOpenEditModal = (category) => {
-    setEditingCategory(category);
+  const handleOpenEditModal = (
+    category
+  ) => {
+    const restaurant =
+      getActiveRestaurant();
+
+    if (!restaurant?.id) {
+      alert(
+        "Restoran aktif tidak ditemukan."
+      );
+
+      return;
+    }
+
+    setActiveRestaurant(
+      restaurant
+    );
+
+    setEditingCategory(
+      category
+    );
 
     setEditFormData({
       restaurant_id:
-        category.restaurant_id ??
-        category.restaurant?.id ??
-        4,
+        Number(
+          restaurant.id
+        ),
 
-      name: category.name || "",
+      name:
+        category.name || "",
 
-      slug: category.slug || "",
+      slug:
+        category.slug || "",
 
       description:
-        category.description || "",
+        category.description ||
+        "",
 
       sort_order:
         category.sort_order ??
@@ -340,194 +848,246 @@ function CategoryPage() {
   // UPDATE KATEGORI
   // ==================================================
 
-  const handleUpdateCategory = async (event) => {
-    event.preventDefault();
+  const handleUpdateCategory =
+    async (event) => {
+      event.preventDefault();
 
-    setEditError("");
+      setEditError("");
 
-    if (!editingCategory) {
-      setEditError(
-        "Kategori tidak ditemukan."
-      );
-
-      return;
-    }
-
-    if (!editFormData.name.trim()) {
-      setEditError(
-        "Nama kategori wajib diisi."
-      );
-
-      return;
-    }
-
-    if (!editFormData.slug.trim()) {
-      setEditError(
-        "Slug kategori wajib diisi."
-      );
-
-      return;
-    }
-
-    try {
-      setEditSaving(true);
-
-      const categoryData = {
-        restaurant_id: Number(
-          editFormData.restaurant_id
-        ),
-
-        name: editFormData.name.trim(),
-
-        slug: editFormData.slug.trim(),
-
-        description:
-          editFormData.description.trim(),
-
-        sort_order: Number(
-          editFormData.sort_order
-        ),
-      };
-
-      console.log(
-        "Data kategori yang diperbarui:",
-        categoryData
-      );
-
-      await updateCategory(
-        editingCategory.id,
-        categoryData
-      );
-
-      setShowEditModal(false);
-      setEditingCategory(null);
-
-      await loadCategories();
-
-      alert(
-        "Kategori berhasil diperbarui."
-      );
-    } catch (error) {
-      console.error(
-        "Gagal memperbarui kategori:",
-        error
-      );
-
-      if (error.response?.data?.errors) {
-        const errors =
-          error.response.data.errors;
-
-        const firstError = Object.values(
-          errors
-        )
-          .flat()
-          .find(Boolean);
-
+      if (!editingCategory) {
         setEditError(
-          firstError ||
-            "Data kategori tidak valid."
+          "Kategori tidak ditemukan."
         );
-      } else if (
-        error.response?.data?.message
+
+        return;
+      }
+
+      const restaurant =
+        getActiveRestaurant();
+
+      if (!restaurant?.id) {
+        setEditError(
+          "Restoran aktif tidak ditemukan."
+        );
+
+        return;
+      }
+
+      if (
+        !editFormData.name.trim()
       ) {
         setEditError(
-          error.response.data.message
+          "Nama kategori wajib diisi."
         );
-      } else {
-        setEditError(
-          "Gagal memperbarui kategori. Silakan coba lagi."
-        );
+
+        return;
       }
-    } finally {
-      setEditSaving(false);
-    }
-  };
+
+      if (
+        !editFormData.slug.trim()
+      ) {
+        setEditError(
+          "Slug kategori wajib diisi."
+        );
+
+        return;
+      }
+
+      try {
+        setEditSaving(true);
+
+        // Gunakan restoran yang sedang login
+        const categoryData = {
+          restaurant_id:
+            Number(
+              restaurant.id
+            ),
+
+          name:
+            editFormData.name.trim(),
+
+          slug:
+            editFormData.slug.trim(),
+
+          description:
+            editFormData.description.trim(),
+
+          sort_order:
+            Number(
+              editFormData.sort_order
+            ),
+        };
+
+        console.log(
+          "Data kategori yang diperbarui:",
+          categoryData
+        );
+
+        await updateCategory(
+          editingCategory.id,
+          categoryData
+        );
+
+        setShowEditModal(false);
+        setEditingCategory(null);
+
+        await loadCategories(
+          restaurant
+        );
+
+        alert(
+          "Kategori berhasil diperbarui."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal memperbarui kategori:",
+          error
+        );
+
+        if (
+          error.response?.data
+            ?.errors
+        ) {
+          const errors =
+            error.response.data
+              .errors;
+
+          const firstError =
+            Object.values(errors)
+              .flat()
+              .find(Boolean);
+
+          setEditError(
+            firstError ||
+              "Data kategori tidak valid."
+          );
+        } else if (
+          error.response?.data
+            ?.message
+        ) {
+          setEditError(
+            error.response.data
+              .message
+          );
+        } else {
+          setEditError(
+            "Gagal memperbarui kategori. Silakan coba lagi."
+          );
+        }
+      } finally {
+        setEditSaving(false);
+      }
+    };
 
   // ==================================================
   // HAPUS KATEGORI
   // ==================================================
 
-  const handleDeleteCategory = async (
-    category
-  ) => {
-    const confirmed = window.confirm(
-      `Apakah kamu yakin ingin menghapus kategori "${category.name}"?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setDeleting(true);
-
-      await deleteCategory(category.id);
-
-      await loadCategories();
-
-      alert(
-        "Kategori berhasil dihapus."
-      );
-    } catch (error) {
-      console.error(
-        "Gagal menghapus kategori:",
-        error
-      );
-
-      if (error.response?.data?.message) {
-        alert(
-          error.response.data.message
+  const handleDeleteCategory =
+    async (category) => {
+      const confirmed =
+        window.confirm(
+          `Apakah kamu yakin ingin menghapus kategori "${category.name}"?`
         );
-      } else {
+
+      if (!confirmed) return;
+
+      const restaurant =
+        getActiveRestaurant();
+
+      if (!restaurant?.id) {
         alert(
-          "Gagal menghapus kategori. Silakan coba lagi."
+          "Restoran aktif tidak ditemukan."
         );
+
+        return;
       }
-    } finally {
-      setDeleting(false);
-    }
-  };
+
+      try {
+        setDeleting(true);
+
+        await deleteCategory(
+          category.id
+        );
+
+        await loadCategories(
+          restaurant
+        );
+
+        alert(
+          "Kategori berhasil dihapus."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal menghapus kategori:",
+          error
+        );
+
+        if (
+          error.response?.data
+            ?.message
+        ) {
+          alert(
+            error.response.data
+              .message
+          );
+        } else {
+          alert(
+            "Gagal menghapus kategori. Silakan coba lagi."
+          );
+        }
+      } finally {
+        setDeleting(false);
+      }
+    };
 
   // ==================================================
   // HITUNG JUMLAH MENU DALAM KATEGORI
   // ==================================================
 
-  const getMenuCount = (category) => {
-  return menus.filter((menu) => {
-    // Ambil ID kategori dari berbagai kemungkinan bentuk data
-    const menuCategoryId =
-      menu.category_id ??
-      menu.category?.id ??
-      menu.category?.category_id;
+  const getMenuCount = (
+    category
+  ) => {
+    return menus.filter(
+      (menu) => {
+        const menuCategoryId =
+          menu.category_id ??
+          menu.category?.id ??
+          menu.category?.category_id;
 
-    // Ambil nama kategori dari berbagai kemungkinan bentuk data
-    const menuCategoryName =
-      menu.category?.name ??
-      menu.category_name;
+        const menuCategoryName =
+          menu.category?.name ??
+          menu.category_name;
 
-    // Cocokkan berdasarkan ID
-    const sameCategoryId =
-      menuCategoryId !== undefined &&
-      Number(menuCategoryId) ===
-        Number(category.id);
+        const sameCategoryId =
+          menuCategoryId !==
+            undefined &&
+          Number(
+            menuCategoryId
+          ) ===
+            Number(
+              category.id
+            );
 
-    // Cocokkan juga berdasarkan nama
-    const sameCategoryName =
-      menuCategoryName &&
-      category.name &&
-      menuCategoryName
-        .toString()
-        .trim()
-        .toLowerCase() ===
-        category.name
-          .toString()
-          .trim()
-          .toLowerCase();
+        const sameCategoryName =
+          menuCategoryName &&
+          category.name &&
+          menuCategoryName
+            .toString()
+            .trim()
+            .toLowerCase() ===
+            category.name
+              .toString()
+              .trim()
+              .toLowerCase();
 
-    return (
-      sameCategoryId ||
-      sameCategoryName
-    );
-  }).length;
-};
+        return (
+          sameCategoryId ||
+          sameCategoryName
+        );
+      }
+    ).length;
+  };
 
   // ==================================================
   // STATISTIK
@@ -536,7 +1096,8 @@ function CategoryPage() {
   const totalCategories =
     categories.length;
 
-  const totalMenus = menus.length;
+  const totalMenus =
+    menus.length;
 
   const categoryWithMostMenus =
     [...categories].sort(
@@ -572,7 +1133,8 @@ function CategoryPage() {
       style={{
         minHeight: "100vh",
         display: "flex",
-        backgroundColor: "#f7f5f6",
+        backgroundColor:
+          "#f7f5f6",
       }}
     >
       {/* SIDEBAR */}
@@ -584,10 +1146,12 @@ function CategoryPage() {
       <main
         style={{
           marginLeft: "240px",
-          width: "calc(100% - 240px)",
+          width:
+            "calc(100% - 240px)",
           minHeight: "100vh",
           padding: "32px",
-          boxSizing: "border-box",
+          boxSizing:
+            "border-box",
         }}
       >
         {/* HEADER */}
@@ -597,17 +1161,22 @@ function CategoryPage() {
             display: "flex",
             justifyContent:
               "space-between",
-            alignItems: "center",
-            marginBottom: "28px",
+            alignItems:
+              "center",
+            marginBottom:
+              "28px",
           }}
         >
           <div>
             <h1
               style={{
                 margin: 0,
-                fontSize: "28px",
-                fontWeight: "700",
-                color: "#211b1d",
+                fontSize:
+                  "28px",
+                fontWeight:
+                  "700",
+                color:
+                  "#211b1d",
               }}
             >
               Kategori
@@ -617,12 +1186,16 @@ function CategoryPage() {
               style={{
                 margin:
                   "8px 0 0",
-                color: "#777",
-                fontSize: "14px",
+                color:
+                  "#777",
+                fontSize:
+                  "14px",
               }}
             >
-              Kelola kategori menu
-              Hoshi Ramen.
+              Kelola kategori menu{" "}
+              {activeRestaurant?.name ||
+                "restoran"}
+              .
             </p>
           </div>
 
@@ -644,15 +1217,22 @@ function CategoryPage() {
         {loading ? (
           <div
             style={{
-              backgroundColor: "#fff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "50px",
-              textAlign: "center",
-              color: "#777",
+              backgroundColor:
+                "#fff",
+              border:
+                "1px solid #eee",
+              borderRadius:
+                "14px",
+              padding:
+                "50px",
+              textAlign:
+                "center",
+              color:
+                "#777",
             }}
           >
-            Memuat data kategori...
+            Memuat data
+            kategori...
           </div>
         ) : (
           <>
@@ -662,11 +1242,13 @@ function CategoryPage() {
 
             <div
               style={{
-                display: "grid",
+                display:
+                  "grid",
                 gridTemplateColumns:
                   "repeat(3, 1fr)",
                 gap: "20px",
-                marginBottom: "24px",
+                marginBottom:
+                  "24px",
               }}
             >
               <StatCard
@@ -679,7 +1261,9 @@ function CategoryPage() {
 
               <StatCard
                 label="Total Menu"
-                value={totalMenus}
+                value={
+                  totalMenus
+                }
                 description="Seluruh menu restoran"
               />
 
@@ -687,7 +1271,8 @@ function CategoryPage() {
                 label="Kategori Terbanyak"
                 value={
                   categoryWithMostMenus
-                    ?.name || "-"
+                    ?.name ||
+                  "-"
                 }
                 description={`${mostMenusCount} menu`}
                 small
@@ -700,7 +1285,8 @@ function CategoryPage() {
 
             <div
               style={{
-                display: "grid",
+                display:
+                  "grid",
                 gridTemplateColumns:
                   "2fr 1fr",
                 gap: "24px",
@@ -755,7 +1341,10 @@ function CategoryPage() {
                     }}
                   >
                     Kelola kategori
-                    menu restoran.
+                    menu{" "}
+                    {activeRestaurant?.name ||
+                      "restoran"}
+                    .
                   </p>
                 </div>
 

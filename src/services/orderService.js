@@ -1,9 +1,5 @@
 import api from "./api";
 
-// =========================================================
-// MEMBUAT PESANAN
-// =========================================================
-
 export const createOrder = async (orderData) => {
   const response = await api.post(
     "/orders",
@@ -13,9 +9,14 @@ export const createOrder = async (orderData) => {
   return response.data;
 };
 
-// =========================================================
-// MENGAMBIL DETAIL PESANAN
-// =========================================================
+export const previewOrder = async (orderData) => {
+  const response = await api.post(
+    "/orders/preview",
+    orderData
+  );
+
+  return response.data;
+};
 
 export const getOrder = async (orderCode) => {
   const response = await api.get(
@@ -24,10 +25,6 @@ export const getOrder = async (orderCode) => {
 
   return response.data;
 };
-
-// =========================================================
-// MENGAMBIL LINK WHATSAPP
-// =========================================================
 
 export const getWhatsAppUrl = async (orderCode) => {
   const response = await api.get(

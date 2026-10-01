@@ -8,6 +8,9 @@ function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // =========================
+  // AMBIL DATA REPORT
+  // =========================
   const fetchReport = async () => {
     try {
       setLoading(true);
@@ -15,7 +18,13 @@ function ReportPage() {
 
       const response = await api.get("/reports/sales");
 
-      setReport(response.data?.data || response.data);
+      // Backend mengembalikan:
+      // {
+      //   total_orders: 7,
+      //   total_sales: 363000,
+      //   data: [...]
+      // }
+      setReport(response.data);
     } catch (err) {
       console.error("Gagal mengambil laporan:", err);
 
@@ -31,64 +40,219 @@ function ReportPage() {
     fetchReport();
   }, []);
 
-  const summary = report?.summary || {};
+  // =========================
+  // DATA ORDER DARI BACKEND
+  // =========================
+  const allOrders = useMemo(() => {
+    if (!report?.data || !Array.isArray(report.data)) {
+      return [];
+    }
 
-  const totalSales = Number(
-    summary.total_sales ??
-      summary.total_revenue ??
-      report?.total_sales ??
-      0
-  );
+    return report.data;
+  }, [report]);
 
-  const totalOrders = Number(
-    summary.total_orders ??
-      report?.total_orders ??
-      0
-  );
+  // =========================
+  // FILTER PERIODE
+  // =========================
+  const filteredOrders = useMemo(() => {
+    if (!allOrders.length) {
+      return [];
+    }
+
+    const now = new Date();
+
+    const startDate = new Date(now);
+
+    if (period === "7") {
+      startDate.setDate(now.getDate() - 6);
+    }
+
+    if (period === "30") {
+      startDate.setDate(now.getDate() - 29);
+    }
+
+    if (period === "month") {
+      startDate.setDate(1);
+    }
+
+    if (period === "year") {
+      startDate.setMonth(0);
+      startDate.setDate(1);
+    }
+
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    return allOrders.filter((order) => {
+      if (!order.created_at) {
+        return false;
+      }
+
+      const orderDate = new Date(order.created_at);
+
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+  }, [allOrders, period]);
+
+  // =========================
+  // SUMMARY
+  // =========================
+  const totalOrders = filteredOrders.length;
+
+  const totalSales = filteredOrders.reduce((total, order) => {
+    return total + Number(order.total || 0);
+  }, 0);
 
   const averageOrder =
     totalOrders > 0
       ? Math.round(totalSales / totalOrders)
       : 0;
 
-  const dailySales =
-    report?.daily_sales ||
-    report?.sales ||
-    [];
+  // =========================
+  // FORMAT RUPIAH
+  // =========================
+  const formatRupiah = (value) => {
+    return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+  };
 
-  const topMenus =
-    report?.top_menus ||
-    report?.top_products ||
-    [];
+  // =========================
+  // FORMAT ANGKA
+  // =========================
+  const formatNumber = (value) => {
+    return Number(value || 0).toLocaleString("id-ID");
+  };
 
+  // =========================
+  // FORMAT TANGGAL
+  // =========================
+  const formatDate = (dateString) => {
+    if (!dateString) {
+      return "-";
+    }
+
+    const date = new Date(dateString);
+
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // =========================
+  // DATA PENJUALAN HARIAN
+  // =========================
+  const dailySales = useMemo(() => {
+    const grouped = {};
+
+    filteredOrders.forEach((order) => {
+      if (!order.created_at) {
+        return;
+      }
+
+      const date = new Date(order.created_at);
+
+      const key = date.toLocaleDateString("id-ID", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          date: key,
+          label: date.toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+          }),
+          total: 0,
+          orders: 0,
+          menu_sold: 0,
+        };
+      }
+
+      grouped[key].total += Number(order.total || 0);
+      grouped[key].orders += 1;
+
+      if (Array.isArray(order.items)) {
+        order.items.forEach((item) => {
+          grouped[key].menu_sold += Number(item.quantity || 0);
+        });
+      }
+    });
+
+    return Object.values(grouped).sort(
+      (a, b) =>
+        new Date(a.date) - new Date(b.date)
+    );
+  }, [filteredOrders]);
+
+  // =========================
+  // MENU TERLARIS
+  // =========================
+  const topMenus = useMemo(() => {
+    const menuMap = {};
+
+    filteredOrders.forEach((order) => {
+      if (!Array.isArray(order.items)) {
+        return;
+      }
+
+      order.items.forEach((item) => {
+        const menu = item.menu;
+
+        if (!menu) {
+          return;
+        }
+
+        const menuId = menu.id;
+
+        if (!menuMap[menuId]) {
+          menuMap[menuId] = {
+            id: menu.id,
+            name: menu.name,
+            total_sold: 0,
+            total_sales: 0,
+          };
+        }
+
+        const quantity = Number(item.quantity || 0);
+        const subtotal = Number(
+          item.subtotal || 0
+        );
+
+        menuMap[menuId].total_sold += quantity;
+        menuMap[menuId].total_sales += subtotal;
+      });
+    });
+
+    return Object.values(menuMap).sort(
+      (a, b) =>
+        b.total_sold - a.total_sold
+    );
+  }, [filteredOrders]);
+
+  // =========================
+  // NILAI MAKSIMAL GRAFIK
+  // =========================
   const maxSale = useMemo(() => {
     if (!dailySales.length) {
       return 1;
     }
 
     return Math.max(
-      ...dailySales.map(
-        (item) =>
-          Number(
-            item.total ??
-              item.sales ??
-              item.revenue ??
-              item.amount ??
-              0
-          )
+      ...dailySales.map((item) =>
+        Number(item.total || 0)
       ),
       1
     );
   }, [dailySales]);
 
-  const formatRupiah = (value) => {
-    return `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
-  };
-
-  const formatNumber = (value) => {
-    return Number(value || 0).toLocaleString("id-ID");
-  };
-
+  // =========================
+  // EXPORT EXCEL / PDF
+  // =========================
   const handleExport = async (type) => {
     try {
       const response = await api.get(
@@ -100,9 +264,11 @@ function ReportPage() {
 
       const blob = new Blob([response.data]);
 
-      const url = window.URL.createObjectURL(blob);
+      const url =
+        window.URL.createObjectURL(blob);
 
-      const link = document.createElement("a");
+      const link =
+        document.createElement("a");
 
       link.href = url;
 
@@ -119,7 +285,10 @@ function ReportPage() {
 
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("Gagal export laporan:", err);
+      console.error(
+        "Gagal export laporan:",
+        err
+      );
 
       alert("Laporan belum dapat diekspor.");
     }
@@ -183,7 +352,9 @@ function ReportPage() {
               <button
                 type="button"
                 className="report-export-button"
-                onClick={() => handleExport("excel")}
+                onClick={() =>
+                  handleExport("excel")
+                }
               >
                 ↓
                 Export Excel
@@ -192,7 +363,9 @@ function ReportPage() {
               <button
                 type="button"
                 className="report-export-primary"
-                onClick={() => handleExport("pdf")}
+                onClick={() =>
+                  handleExport("pdf")
+                }
               >
                 ↓
                 Export PDF
@@ -209,7 +382,9 @@ function ReportPage() {
           <section className="report-filter-card">
 
             <div className="report-filter-title">
-              <span>Periode Laporan</span>
+              <span>
+                Periode Laporan
+              </span>
 
               <strong>
                 Pilih rentang waktu
@@ -225,7 +400,9 @@ function ReportPage() {
                     ? "active"
                     : ""
                 }
-                onClick={() => setPeriod("7")}
+                onClick={() =>
+                  setPeriod("7")
+                }
               >
                 7 Hari
               </button>
@@ -237,7 +414,9 @@ function ReportPage() {
                     ? "active"
                     : ""
                 }
-                onClick={() => setPeriod("30")}
+                onClick={() =>
+                  setPeriod("30")
+                }
               >
                 30 Hari
               </button>
@@ -249,7 +428,9 @@ function ReportPage() {
                     ? "active"
                     : ""
                 }
-                onClick={() => setPeriod("month")}
+                onClick={() =>
+                  setPeriod("month")
+                }
               >
                 Bulan Ini
               </button>
@@ -261,7 +442,9 @@ function ReportPage() {
                     ? "active"
                     : ""
                 }
-                onClick={() => setPeriod("year")}
+                onClick={() =>
+                  setPeriod("year")
+                }
               >
                 Tahun Ini
               </button>
@@ -317,7 +500,9 @@ function ReportPage() {
                 <strong>
                   {loading
                     ? "..."
-                    : formatRupiah(totalSales)}
+                    : formatRupiah(
+                        totalSales
+                      )}
                 </strong>
 
                 <small>
@@ -341,7 +526,9 @@ function ReportPage() {
                 <strong>
                   {loading
                     ? "..."
-                    : formatNumber(totalOrders)}
+                    : formatNumber(
+                        totalOrders
+                      )}
                 </strong>
 
                 <small>
@@ -365,7 +552,9 @@ function ReportPage() {
                 <strong>
                   {loading
                     ? "..."
-                    : formatRupiah(averageOrder)}
+                    : formatRupiah(
+                        averageOrder
+                      )}
                 </strong>
 
                 <small>
@@ -388,9 +577,7 @@ function ReportPage() {
 
                 <strong className="report-best-menu">
                   {topMenus.length > 0
-                    ? topMenus[0]?.name ||
-                      topMenus[0]?.menu_name ||
-                      "-"
+                    ? topMenus[0].name
                     : "-"}
                 </strong>
 
@@ -442,11 +629,15 @@ function ReportPage() {
                 <div className="report-y-axis">
 
                   <span>
-                    {formatRupiah(maxSale)}
+                    {formatRupiah(
+                      maxSale
+                    )}
                   </span>
 
                   <span>
-                    {formatRupiah(maxSale / 2)}
+                    {formatRupiah(
+                      maxSale / 2
+                    )}
                   </span>
 
                   <span>
@@ -458,53 +649,64 @@ function ReportPage() {
                 <div className="report-chart-area">
 
                   <div className="report-grid-line top" />
+
                   <div className="report-grid-line middle" />
+
                   <div className="report-grid-line bottom" />
 
                   <div className="report-bars">
 
                     {dailySales.length > 0 ? (
-                      dailySales.map((item, index) => {
+                      dailySales.map(
+                        (item, index) => {
 
-                        const value = Number(
-                          item.total ??
-                            item.sales ??
-                            item.revenue ??
-                            item.amount ??
-                            0
-                        );
+                          const value =
+                            Number(
+                              item.total || 0
+                            );
 
-                        const height = Math.max(
-                          (value / maxSale) * 100,
-                          3
-                        );
+                          const height =
+                            Math.max(
+                              (value /
+                                maxSale) *
+                                100,
+                              3
+                            );
 
-                        return (
-                          <div
-                            className="report-bar-column"
-                            key={item.date || index}
-                          >
-
-                            <div className="report-bar-value">
-                              {formatRupiah(value)}
-                            </div>
-
+                          return (
                             <div
-                              className="report-bar"
-                              style={{
-                                height: `${height}%`,
-                              }}
-                            />
-
-                            <span>
-                              {item.label ||
+                              className="report-bar-column"
+                              key={
                                 item.date ||
-                                `Hari ${index + 1}`}
-                            </span>
+                                index
+                              }
+                            >
 
-                          </div>
-                        );
-                      })
+                              <div className="report-bar-value">
+                                {formatRupiah(
+                                  value
+                                )}
+                              </div>
+
+                              <div
+                                className="report-bar"
+                                style={{
+                                  height: `${height}%`,
+                                }}
+                              />
+
+                              <span>
+                                {item.label ||
+                                  item.date ||
+                                  `Hari ${
+                                    index + 1
+                                  }`}
+                              </span>
+
+                            </div>
+                          );
+                        }
+                      )
                     ) : (
                       <div className="report-no-chart">
                         Belum ada data penjualan
@@ -548,52 +750,59 @@ function ReportPage() {
                 {topMenus.length > 0 ? (
                   topMenus
                     .slice(0, 5)
-                    .map((menu, index) => {
+                    .map(
+                      (menu, index) => {
 
-                      const sold = Number(
-                        menu.total_sold ??
-                          menu.sold ??
-                          menu.quantity ??
-                          0
-                      );
+                        const sold =
+                          Number(
+                            menu.total_sold ||
+                              0
+                          );
 
-                      return (
-                        <div
-                          className="report-top-menu-item"
-                          key={menu.id || index}
-                        >
+                        return (
+                          <div
+                            className="report-top-menu-item"
+                            key={
+                              menu.id ||
+                              index
+                            }
+                          >
 
-                          <div className="report-ranking">
-                            {String(index + 1).padStart(2, "0")}
+                            <div className="report-ranking">
+                              {String(
+                                index + 1
+                              ).padStart(
+                                2,
+                                "0"
+                              )}
+                            </div>
+
+                            <div className="report-menu-info">
+
+                              <strong>
+                                {menu.name ||
+                                  "Menu"}
+                              </strong>
+
+                              <span>
+                                {formatNumber(
+                                  sold
+                                )}{" "}
+                                terjual
+                              </span>
+
+                            </div>
+
+                            <div className="report-menu-sales">
+                              {formatRupiah(
+                                menu.total_sales
+                              )}
+                            </div>
+
                           </div>
-
-                          <div className="report-menu-info">
-
-                            <strong>
-                              {menu.name ||
-                                menu.menu_name ||
-                                "Menu"}
-                            </strong>
-
-                            <span>
-                              {sold} terjual
-                            </span>
-
-                          </div>
-
-                          <div className="report-menu-sales">
-                            {formatRupiah(
-                              Number(
-                                menu.total_sales ||
-                                  menu.revenue ||
-                                  0
-                              )
-                            )}
-                          </div>
-
-                        </div>
-                      );
-                    })
+                        );
+                      }
+                    )
                 ) : (
                   <div className="report-empty-list">
                     Belum ada data menu.
@@ -641,7 +850,9 @@ function ReportPage() {
               <table className="report-table">
 
                 <thead>
+
                   <tr>
+
                     <th>
                       TANGGAL
                     </th>
@@ -661,80 +872,95 @@ function ReportPage() {
                     <th>
                       RATA-RATA
                     </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody>
 
                   {dailySales.length > 0 ? (
-                    dailySales.map((item, index) => {
+                    dailySales.map(
+                      (item, index) => {
 
-                      const sales = Number(
-                        item.total ??
-                          item.sales ??
-                          item.revenue ??
-                          item.amount ??
-                          0
-                      );
+                        const sales =
+                          Number(
+                            item.total ||
+                              0
+                          );
 
-                      const orders = Number(
-                        item.orders ??
-                          item.total_orders ??
-                          0
-                      );
+                        const orders =
+                          Number(
+                            item.orders ||
+                              0
+                          );
 
-                      const menuSold = Number(
-                        item.menu_sold ??
-                          item.items ??
-                          item.quantity ??
-                          0
-                      );
+                        const menuSold =
+                          Number(
+                            item.menu_sold ||
+                              0
+                          );
 
-                      const average =
-                        orders > 0
-                          ? sales / orders
-                          : 0;
+                        const average =
+                          orders > 0
+                            ? sales /
+                              orders
+                            : 0;
 
-                      return (
-                        <tr
-                          key={item.date || index}
-                        >
-
-                          <td>
-                            {item.label ||
+                        return (
+                          <tr
+                            key={
                               item.date ||
-                              "-"}
-                          </td>
+                              index
+                            }
+                          >
 
-                          <td>
-                            {formatNumber(orders)}
-                          </td>
+                            <td>
+                              {formatDate(
+                                item.date
+                              )}
+                            </td>
 
-                          <td>
-                            {formatNumber(menuSold)}
-                          </td>
+                            <td>
+                              {formatNumber(
+                                orders
+                              )}
+                            </td>
 
-                          <td>
-                            <strong>
-                              {formatRupiah(sales)}
-                            </strong>
-                          </td>
+                            <td>
+                              {formatNumber(
+                                menuSold
+                              )}
+                            </td>
 
-                          <td>
-                            {formatRupiah(average)}
-                          </td>
+                            <td>
+                              <strong>
+                                {formatRupiah(
+                                  sales
+                                )}
+                              </strong>
+                            </td>
 
-                        </tr>
-                      );
-                    })
+                            <td>
+                              {formatRupiah(
+                                average
+                              )}
+                            </td>
+
+                          </tr>
+                        );
+                      }
+                    )
                   ) : (
                     <tr>
+
                       <td
                         colSpan="5"
                         className="report-table-empty"
                       >
                         Belum ada data laporan
                       </td>
+
                     </tr>
                   )}
 

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useCart } from '../../context/useCart';
 import { useEffect, useState } from 'react';
 
@@ -9,6 +9,9 @@ function CartPage() {
     removeFromCart,
   } = useCart();
 
+  const { slug } = useParams();
+  const location = useLocation();
+
   // =========================
   // DATA MEJA
   // =========================
@@ -17,13 +20,15 @@ function CartPage() {
 
   useEffect(() => {
     try {
-      const savedTable = localStorage.getItem('restaurantTable');
+      const savedTable =
+        localStorage.getItem('restaurantTable');
 
       if (!savedTable) {
         return;
       }
 
-      const parsedTable = JSON.parse(savedTable);
+      const parsedTable =
+        JSON.parse(savedTable);
 
       const tableData =
         parsedTable?.table ||
@@ -43,28 +48,108 @@ function CartPage() {
   }, []);
 
   // =========================
+  // DATA RESTAURANT
+  // =========================
+
+  const savedRestaurantSlug =
+    localStorage.getItem(
+      'restaurantSlug'
+    );
+
+  const savedTableCode =
+    localStorage.getItem(
+      'restaurantTableCode'
+    );
+
+  // =========================
+  // NOMOR MEJA DARI URL
+  // =========================
+
+  const params =
+    new URLSearchParams(
+      location.search
+    );
+
+  const tableCodeFromUrl =
+    params.get('table');
+
+  // =========================
   // TOTAL
   // =========================
 
-  const totalPrice = cartItems.reduce(
-    (total, item) =>
-      total + (Number(item.totalPrice) || 0),
-    0
-  );
+  const totalPrice =
+    cartItems.reduce(
+      (total, item) =>
+        total +
+        (Number(item.totalPrice) || 0),
+      0
+    );
 
-  const totalItems = cartItems.reduce(
-    (total, item) =>
-      total + (Number(item.quantity) || 0),
-    0
-  );
+  const totalItems =
+    cartItems.reduce(
+      (total, item) =>
+        total +
+        (Number(item.quantity) || 0),
+      0
+    );
 
   // =========================
-  // LINK KEMBALI KE MENU
+  // KODE MEJA
   // =========================
 
-  const menuLink = table?.code
-    ? `/?table=${table.code}`
-    : '/';
+  const currentTableCode =
+    table?.code ||
+    tableCodeFromUrl ||
+    savedTableCode;
+
+  // =========================
+  // RESTAURANT SLUG
+  // =========================
+
+  const currentRestaurantSlug =
+    slug ||
+    savedRestaurantSlug;
+
+  // =========================
+  // URL KEMBALI KE MENU
+  // =========================
+  //
+  // Prioritaskan URL yang disimpan
+  // ketika QR pertama kali dibuka.
+  //
+  // Contoh:
+  // /menu/hoshi-ramen?table=HOSHI-001
+  //
+
+  const savedMenuReturnUrl =
+    localStorage.getItem(
+      'menuReturnUrl'
+    );
+
+  const menuLink =
+    savedMenuReturnUrl ||
+    (
+      currentRestaurantSlug
+        ? currentTableCode
+          ? `/menu/${currentRestaurantSlug}?table=${currentTableCode}`
+          : `/menu/${currentRestaurantSlug}`
+        : currentTableCode
+          ? `/?table=${currentTableCode}`
+          : '/'
+    );
+
+  // =========================
+  // URL KE HALAMAN ORDER
+  // =========================
+  //
+  // Kita juga membawa kode meja
+  // ketika masuk ke halaman Order.
+  //
+
+  const orderLink =
+    currentTableCode
+      ? `/order?table=${currentTableCode}`
+      : '/order';
 
   // =========================
   // KERANJANG KOSONG
@@ -76,17 +161,22 @@ function CartPage() {
         <div className="container cart-container">
 
           {/* HEADER */}
+
           <div className="cart-page-header">
 
             <Link
               to={menuLink}
               className="cart-back"
             >
-              <span>←</span>
+              <span>
+                ←
+              </span>
+
               Kembali ke menu
             </Link>
 
             <div className="cart-title-area">
+
               <p className="cart-label">
                 YOUR ORDER
               </p>
@@ -94,11 +184,13 @@ function CartPage() {
               <h1>
                 Keranjang
               </h1>
+
             </div>
 
           </div>
 
           {/* EMPTY CART */}
+
           <div className="cart-empty">
 
             <div className="cart-empty-icon">
@@ -114,8 +206,9 @@ function CartPage() {
             </h2>
 
             <p className="cart-empty-description">
-              Pilih menu favoritmu dan tambahkan
-              ke keranjang untuk mulai memesan.
+              Pilih menu favoritmu dan
+              tambahkan ke keranjang
+              untuk mulai memesan.
             </p>
 
             <Link
@@ -123,7 +216,10 @@ function CartPage() {
               className="cart-empty-button"
             >
               Lihat Menu
-              <span>→</span>
+
+              <span>
+                →
+              </span>
             </Link>
 
           </div>
@@ -139,16 +235,21 @@ function CartPage() {
 
   return (
     <main className="cart-page">
+
       <div className="container cart-container">
 
         {/* HEADER */}
+
         <div className="cart-page-header">
 
           <Link
             to={menuLink}
             className="cart-back"
           >
-            <span>←</span>
+            <span>
+              ←
+            </span>
+
             Kembali ke menu
           </Link>
 
@@ -165,8 +266,8 @@ function CartPage() {
               </h1>
 
               <p className="cart-subtitle">
-                Periksa kembali pesananmu sebelum
-                melanjutkan.
+                Periksa kembali pesananmu
+                sebelum melanjutkan.
               </p>
 
             </div>
@@ -180,9 +281,11 @@ function CartPage() {
         </div>
 
         {/* CONTENT */}
+
         <div className="cart-content">
 
           {/* DAFTAR ITEM */}
+
           <section className="cart-items-section">
 
             <div className="cart-section-heading">
@@ -199,159 +302,196 @@ function CartPage() {
 
             <div className="cart-list">
 
-              {cartItems.map((item, index) => {
+              {cartItems.map(
+                (item, index) => {
 
-                const variantPrice = item.variant
-                  ? Number(item.variant.price) || 0
-                  : 0;
+                  const variantPrice =
+                    item.variant
+                      ? Number(
+                          item.variant.price
+                        ) || 0
+                      : 0;
 
-                const addonPrice = item.addons
-                  ? item.addons.reduce(
-                      (total, addon) =>
-                        total +
-                        (Number(addon.price) || 0),
-                      0
-                    )
-                  : 0;
+                  const addonPrice =
+                    item.addons
+                      ? item.addons.reduce(
+                          (
+                            total,
+                            addon
+                          ) =>
+                            total +
+                            (
+                              Number(
+                                addon.price
+                              ) || 0
+                            ),
+                          0
+                        )
+                      : 0;
 
-                const unitPrice =
-                  (Number(item.price) || 0) +
-                  variantPrice +
-                  addonPrice;
+                  const unitPrice =
+                    (
+                      Number(
+                        item.price
+                      ) || 0
+                    ) +
+                    variantPrice +
+                    addonPrice;
 
-                const itemTotal =
-                  unitPrice * item.quantity;
+                  const itemTotal =
+                    unitPrice *
+                    item.quantity;
 
-                return (
-                  <article
-                    className="cart-item"
-                    key={`${item.menuId}-${index}`}
-                  >
+                  return (
+                    <article
+                      className="cart-item"
+                      key={`${item.menuId}-${index}`}
+                    >
 
-                    {/* INFO MENU */}
-                    <div className="cart-item-info">
+                      {/* INFO MENU */}
 
-                      <h3>
-                        {item.name}
-                      </h3>
+                      <div className="cart-item-info">
 
-                      <div className="cart-item-details">
+                        <h3>
+                          {item.name}
+                        </h3>
 
-                        {item.variant && (
-                          <div className="cart-detail-row">
+                        <div className="cart-item-details">
 
-                            <span>
-                              Variant
-                            </span>
-
-                            <strong>
-                              {item.variant.name}
-                            </strong>
-
-                          </div>
-                        )}
-
-                        {item.addons &&
-                          item.addons.length > 0 && (
+                          {item.variant && (
                             <div className="cart-detail-row">
 
                               <span>
-                                Tambahan
+                                Variant
                               </span>
 
                               <strong>
-                                {item.addons
-                                  .map(
-                                    (addon) =>
-                                      addon.name
-                                  )
-                                  .join(', ')}
-                            </strong>
+                                {
+                                  item.variant
+                                    .name
+                                }
+                              </strong>
 
-                          </div>
-                        )}
+                            </div>
+                          )}
+
+                          {item.addons &&
+                            item.addons.length >
+                              0 && (
+                              <div className="cart-detail-row">
+
+                                <span>
+                                  Tambahan
+                                </span>
+
+                                <strong>
+                                  {item.addons
+                                    .map(
+                                      (
+                                        addon
+                                      ) =>
+                                        addon.name
+                                    )
+                                    .join(
+                                      ', '
+                                    )}
+                                </strong>
+
+                              </div>
+                            )}
+
+                        </div>
+
+                        <div className="cart-unit-price">
+
+                          Rp{' '}
+                          {unitPrice.toLocaleString(
+                            'id-ID'
+                          )}
+
+                          <span>
+                            {' '}
+                            / item
+                          </span>
+
+                        </div>
 
                       </div>
 
-                      <div className="cart-unit-price">
-                        Rp{' '}
-                        {unitPrice.toLocaleString(
-                          'id-ID'
-                        )}
+                      {/* ACTION */}
 
-                        <span>
-                          {' '}
-                          / item
-                        </span>
-                      </div>
+                      <div className="cart-item-action">
 
-                    </div>
+                        <div className="cart-quantity">
 
-                    {/* ACTION */}
-                    <div className="cart-item-action">
+                          <button
+                            type="button"
+                            aria-label="Kurangi jumlah"
+                            onClick={() =>
+                              updateQuantity(
+                                index,
+                                item.quantity -
+                                  1
+                              )
+                            }
+                          >
+                            −
+                          </button>
 
-                      <div className="cart-quantity">
+                          <span>
+                            {item.quantity}
+                          </span>
+
+                          <button
+                            type="button"
+                            aria-label="Tambah jumlah"
+                            onClick={() =>
+                              updateQuantity(
+                                index,
+                                item.quantity +
+                                  1
+                              )
+                            }
+                          >
+                            +
+                          </button>
+
+                        </div>
+
+                        <div className="cart-item-total">
+
+                          Rp{' '}
+                          {itemTotal.toLocaleString(
+                            'id-ID'
+                          )}
+
+                        </div>
 
                         <button
                           type="button"
-                          aria-label="Kurangi jumlah"
+                          className="cart-remove"
                           onClick={() =>
-                            updateQuantity(
-                              index,
-                              item.quantity - 1
+                            removeFromCart(
+                              index
                             )
                           }
                         >
-                          −
-                        </button>
-
-                        <span>
-                          {item.quantity}
-                        </span>
-
-                        <button
-                          type="button"
-                          aria-label="Tambah jumlah"
-                          onClick={() =>
-                            updateQuantity(
-                              index,
-                              item.quantity + 1
-                            )
-                          }
-                        >
-                          +
+                          Hapus
                         </button>
 
                       </div>
 
-                      <div className="cart-item-total">
-                        Rp{' '}
-                        {itemTotal.toLocaleString(
-                          'id-ID'
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="cart-remove"
-                        onClick={() =>
-                          removeFromCart(index)
-                        }
-                      >
-                        Hapus
-                      </button>
-
-                    </div>
-
-                  </article>
-                );
-              })}
+                    </article>
+                  );
+                }
+              )}
 
             </div>
 
           </section>
 
           {/* SUMMARY */}
+
           <aside className="cart-summary">
 
             <div className="cart-summary-heading">
@@ -389,7 +529,8 @@ function CartPage() {
                 </span>
 
                 <small>
-                  Harga sudah termasuk pilihan menu
+                  Harga sudah termasuk
+                  pilihan menu
                 </small>
 
               </div>
@@ -403,15 +544,21 @@ function CartPage() {
 
             </div>
 
+            {/* LANJUT KE ORDER */}
+
             <Link
-              to="/order"
+              to={orderLink}
               className="cart-checkout-button"
             >
               Lanjut ke Pesanan
-              <span>→</span>
+
+              <span>
+                →
+              </span>
             </Link>
 
-            {/* KEMBALI KE MENU TANPA SCAN QR ULANG */}
+            {/* TAMBAH MENU */}
+
             <Link
               to={menuLink}
               className="cart-continue-button"
@@ -424,6 +571,7 @@ function CartPage() {
         </div>
 
       </div>
+
     </main>
   );
 }

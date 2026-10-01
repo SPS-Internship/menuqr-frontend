@@ -1,27 +1,69 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  Link,
+  useParams,
+} from "react-router-dom";
+
 import { useCart } from "../../context/useCart";
+
 import {
   createOrder,
-  getWhatsAppUrl,
+  previewOrder,
 } from "../../services/orderService";
 
 function OrderPage() {
-  const { cartItems } = useCart();
+  const { slug } = useParams();
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
+  const {
+    cartItems,
+    clearCart,
+  } = useCart();
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [note, setNote] =
+    useState("");
+
+  const [latitude, setLatitude] =
+    useState(null);
+
+  const [longitude, setLongitude] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [orderSuccess, setOrderSuccess] =
+    useState(false);
+
+  const [successOrder, setSuccessOrder] =
+    useState(null);
+
+  const [successTotal, setSuccessTotal] =
+    useState(0);
+
+  const [promoPreview, setPromoPreview] =
+    useState(null);
+
+  const [promoLoading, setPromoLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
 
   // =========================================================
-  // AMBIL DATA MEJA DARI LOCAL STORAGE
+  // TABLE
   // =========================================================
 
   const savedTable =
-    localStorage.getItem("restaurantTable");
+    localStorage.getItem(
+      "restaurantTable"
+    );
 
   let parsedTable = null;
 
@@ -29,10 +71,10 @@ function OrderPage() {
     parsedTable = savedTable
       ? JSON.parse(savedTable)
       : null;
-  } catch (parseError) {
+  } catch (error) {
     console.error(
-      "Gagal membaca data restaurantTable:",
-      parseError
+      "Gagal membaca data meja:",
+      error
     );
 
     parsedTable = null;
@@ -45,493 +87,534 @@ function OrderPage() {
     parsedTable;
 
   // =========================================================
-  // HITUNG TOTAL PESANAN
+  // RESTAURANT
   // =========================================================
 
-  const grandTotal = cartItems.reduce(
-    (total, item) =>
-      total + (Number(item.totalPrice) || 0),
+  const savedRestaurantSlug =
+    localStorage.getItem(
+      "restaurantSlug"
+    );
+
+  const restaurantSlug =
+    slug ||
+    savedRestaurantSlug ||
+    table?.restaurant?.slug ||
+    parsedTable?.restaurant?.slug ||
+    parsedTable?.data?.restaurant?.slug ||
+    "";
+
+  // =========================================================
+  // TABLE CODE
+  // =========================================================
+
+  const savedTableCode =
+    localStorage.getItem(
+      "restaurantTableCode"
+    );
+
+  const tableCode =
+    savedTableCode ||
+    table?.code ||
+    table?.table_code ||
+    table?.number ||
+    "";
+
+  // =========================================================
+  // MENU RETURN URL
+  // =========================================================
+
+  const savedMenuReturnUrl =
+    localStorage.getItem(
+      "menuReturnUrl"
+    );
+
+  const menuLink =
+    savedMenuReturnUrl ||
+    (restaurantSlug
+      ? tableCode
+        ? `/menu/${restaurantSlug}?table=${tableCode}`
+        : `/menu/${restaurantSlug}`
+      : tableCode
+        ? `/?table=${tableCode}`
+        : "/");
+
+  // =========================================================
+  // TOTAL CART
+  // =========================================================
+
+  const total = cartItems.reduce(
+    (totalAmount, item) => {
+      const itemTotal =
+        item.totalPrice ||
+        Number(item.price || 0) *
+          Number(item.quantity || 0);
+
+      return (
+        totalAmount +
+        Number(itemTotal)
+      );
+    },
     0
   );
 
   // =========================================================
-  // LINK KEMBALI KE MENU
+  // PREVIEW PROMO
   // =========================================================
 
-  const menuLink = table?.code
-    ? `/?table=${table.code}`
-    : "/";
+  const handlePreviewPromo = async () => {
+    if (
+      !cartItems ||
+      cartItems.length === 0
+    ) {
+      setPromoPreview(null);
+      return;
+    }
 
-  // =========================================================
-  // VALIDASI FORM
-  // =========================================================
+    const restaurantId =
+      cartItems[0]?.restaurantId;
 
-  const isFormValid =
-    name.trim() !== "" &&
-    phone.trim() !== "";
+    if (!restaurantId) {
+      setPromoPreview(null);
+      return;
+    }
 
-  // =========================================================
-  // AMBIL LOKASI PELANGGAN
-  // =========================================================
+    const items = cartItems.map(
+      (item) => ({
+        menu_id:
+          item.menuId,
 
-  const getCurrentLocation = () => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject({
-          type: "geolocation",
-          message:
-            "Browser kamu tidak mendukung fitur lokasi.",
+        variant_id:
+          item.variant?.id || null,
+
+        addon_ids:
+          Array.isArray(item.addons)
+            ? item.addons.map(
+                (addon) =>
+                  addon.id
+              )
+            : [],
+
+        quantity:
+          item.quantity,
+      })
+    );
+
+    try {
+      setPromoLoading(true);
+
+      const response =
+        await previewOrder({
+          restaurant_id:
+            restaurantId,
+
+          items: items,
         });
 
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-
-        (locationError) => {
-          reject({
-            type: "geolocation",
-            code: locationError.code,
-            message:
-              "Lokasi tidak dapat diambil.",
-          });
-        },
-
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
+      console.log(
+        "Preview promo:",
+        response
       );
-    });
+
+      setPromoPreview(
+        response?.data || null
+      );
+    } catch (error) {
+      console.error(
+        "Gagal preview promo:",
+        error
+      );
+
+      console.error(
+        "Response error:",
+        error?.response?.data
+      );
+
+      setPromoPreview(null);
+    } finally {
+      setPromoLoading(false);
+    }
   };
 
   // =========================================================
-  // KONFIRMASI PESANAN
+  // AUTO PREVIEW PROMO
   // =========================================================
 
-  const handleConfirmOrder = async () => {
-    // -------------------------------------------------------
-    // VALIDASI NAMA
-    // -------------------------------------------------------
+  useEffect(() => {
+    handlePreviewPromo();
+  }, [cartItems]);
 
-    if (name.trim() === "") {
+  // =========================================================
+  // GET LOCATION
+  // =========================================================
+
+  const getLocation = () => {
+    if (!navigator.geolocation) {
       setError(
-        "Nama wajib diisi sebelum melakukan konfirmasi pesanan."
+        "Browser kamu tidak mendukung pengambilan lokasi."
       );
 
       return;
     }
 
-    // -------------------------------------------------------
-    // VALIDASI NOMOR WHATSAPP
-    // -------------------------------------------------------
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(
+          position.coords.latitude
+        );
 
-    if (phone.trim() === "") {
-      setError(
-        "Nomor WhatsApp wajib diisi sebelum melakukan konfirmasi pesanan."
-      );
+        setLongitude(
+          position.coords.longitude
+        );
 
-      return;
-    }
+        setError("");
+      },
+      (locationError) => {
+        console.error(
+          "Gagal mengambil lokasi:",
+          locationError
+        );
 
-    // -------------------------------------------------------
-    // VALIDASI MEJA
-    // -------------------------------------------------------
+        setError(
+          "Lokasi diperlukan untuk membuat pesanan. Silakan izinkan akses lokasi."
+        );
+      }
+    );
+  };
 
-    if (!table?.id) {
-      setError(
-        "Data meja tidak ditemukan. Silakan kembali ke menu dan scan QR Code meja."
-      );
+  // =========================================================
+  // SUBMIT ORDER
+  // =========================================================
 
-      return;
-    }
+  const handleSubmit = async (
+    event
+  ) => {
+    event.preventDefault();
 
-    // -------------------------------------------------------
-    // VALIDASI KERANJANG
-    // -------------------------------------------------------
+    setError("");
 
     if (
       !cartItems ||
       cartItems.length === 0
     ) {
       setError(
-        "Keranjang pesanan masih kosong."
+        "Keranjang masih kosong."
       );
 
       return;
     }
 
-    try {
-      setLoading(true);
-      setError("");
-
-      // =====================================================
-      // 1. AMBIL LOKASI PELANGGAN
-      // =====================================================
-
-      console.log(
-        "Mengambil lokasi pelanggan..."
+    if (!customerName.trim()) {
+      setError(
+        "Silakan isi nama pelanggan."
       );
 
-      const location =
-        await getCurrentLocation();
+      return;
+    }
 
-      console.log(
-        "Lokasi pelanggan:",
-        location
+    if (
+      latitude === null ||
+      longitude === null
+    ) {
+      setError(
+        "Silakan izinkan akses lokasi terlebih dahulu."
       );
 
-      // =====================================================
-      // VALIDASI RESTAURANT ID
-      // =====================================================
+      getLocation();
 
-      const restaurantId =
-        cartItems[0]?.restaurantId ||
-        table?.restaurant_id ||
-        table?.restaurantId ||
-        table?.restaurant?.id;
+      return;
+    }
 
-      if (!restaurantId) {
-        throw new Error(
-          "Restaurant ID tidak ditemukan dari data pesanan."
-        );
-      }
+    const restaurantId =
+      cartItems[0]?.restaurantId;
 
-      // =====================================================
-      // 2. BUAT DATA PESANAN
-      // =====================================================
+    if (!restaurantId) {
+      setError(
+        "Restaurant tidak ditemukan dari data pesanan."
+      );
 
-      const orderData = {
-        // ---------------------------------------------------
-        // RESTAURANT
-        // ---------------------------------------------------
+      return;
+    }
 
-        restaurant_id:
-          restaurantId,
+    const items = cartItems.map(
+      (item) => ({
+        menu_id:
+          item.menuId,
 
-        // ---------------------------------------------------
-        // MEJA
-        // ---------------------------------------------------
+        variant_id:
+          item.variant?.id || null,
 
-        table_id:
-          table.id,
+        addon_ids:
+          Array.isArray(item.addons)
+            ? item.addons.map(
+                (addon) =>
+                  addon.id
+              )
+            : [],
 
-        // ---------------------------------------------------
-        // PELANGGAN
-        // ---------------------------------------------------
-
-        customer_name:
-          name.trim(),
-
-        // ---------------------------------------------------
-        // CATATAN
-        // ---------------------------------------------------
+        quantity:
+          item.quantity,
 
         note:
-          notes.trim() || null,
+          item.note || "",
+      })
+    );
 
-        // ---------------------------------------------------
-        // LOKASI PELANGGAN
-        // ---------------------------------------------------
+    const orderData = {
+      restaurant_id:
+        restaurantId,
 
-        latitude:
-          location.latitude,
+      table_id:
+        table?.id || null,
 
-        longitude:
-          location.longitude,
+      customer_name:
+        customerName.trim(),
 
-        // ---------------------------------------------------
-        // ITEM PESANAN
-        // ---------------------------------------------------
+      note:
+        note.trim(),
 
-        items: cartItems.map(
-          (item) => ({
-            menu_id:
-              item.menuId,
+      latitude:
+        latitude,
 
-            variant_id:
-              item.variant?.id || null,
+      longitude:
+        longitude,
 
-            addon_ids:
-              item.addons
-                ? item.addons.map(
-                    (addon) =>
-                      addon.id
-                  )
-                : [],
+      items:
+        items,
+    };
 
-            quantity:
-              item.quantity,
-
-            note:
-              null,
-          })
-        ),
-      };
-
-      // =====================================================
-      // DEBUG DATA
-      // =====================================================
+    try {
+      setLoading(true);
 
       console.log(
         "Data yang dikirim:",
         orderData
       );
 
-      // =====================================================
-      // 3. BUAT PESANAN
-      // =====================================================
-
-      const result =
-        await createOrder(orderData);
+      const response =
+        await createOrder(
+          orderData
+        );
 
       console.log(
         "Response order:",
-        result
+        response
       );
-
-      // =====================================================
-      // 4. AMBIL DATA ORDER DARI RESPONSE
-      // =====================================================
-
-      /*
-       * Backend mengembalikan:
-       *
-       * {
-       *   message: "Pesanan berhasil dibuat",
-       *   data: {
-       *     id: 23,
-       *     order_code: "ORD-XXXXXXXX",
-       *     ...
-       *   }
-       * }
-       */
 
       const order =
-        result?.data;
+        response?.data ||
+        response?.order ||
+        response;
 
-      console.log(
-        "Data order:",
-        order
-      );
-
-      // =====================================================
-      // AMBIL ID ORDER
-      // =====================================================
-
-      const orderId =
-        order?.id;
-
-      console.log(
-        "ID Pesanan:",
-        orderId
-      );
+      setSuccessOrder(order);
 
       // =====================================================
-      // AMBIL ORDER CODE
+      // GUNAKAN TOTAL DARI BACKEND
+      // Karena backend sudah menghitung promo
       // =====================================================
 
-      const orderCode =
-        order?.order_code;
-
-      console.log(
-        "Order Code:",
-        orderCode
-      );
-
-      // =====================================================
-      // VALIDASI ORDER CODE
-      // =====================================================
-
-      if (!orderCode) {
-        console.error(
-          "Order code tidak ditemukan.",
-          result
+      const finalTotal =
+        Number(
+          order?.total ??
+          promoPreview?.total ??
+          total
         );
 
-        throw new Error(
-          "Kode pesanan tidak ditemukan dari response backend."
-        );
-      }
-
-      // =====================================================
-      // 5. AMBIL LINK WHATSAPP
-      // =====================================================
-
-      console.log(
-        "Mengambil link WhatsApp berdasarkan order code:",
-        orderCode
+      setSuccessTotal(
+        finalTotal
       );
 
-      const whatsappResult =
-        await getWhatsAppUrl(
-          orderCode
-        );
+      setOrderSuccess(true);
 
-      console.log(
-        "Response WhatsApp:",
-        whatsappResult
-      );
-
-      // =====================================================
-      // 6. AMBIL WHATSAPP URL
-      // =====================================================
-
-      const whatsappUrl =
-        whatsappResult?.whatsapp_url ||
-        whatsappResult?.data?.whatsapp_url;
-
-      console.log(
-        "WhatsApp URL:",
-        whatsappUrl
-      );
-
-      // =====================================================
-      // 7. BUKA WHATSAPP
-      // =====================================================
-
-      if (whatsappUrl) {
-        window.open(
-          whatsappUrl,
-          "_blank"
-        );
-      } else {
-        setError(
-          "Pesanan berhasil dibuat, tetapi link WhatsApp tidak ditemukan."
-        );
-
-        return;
-      }
-
-      // =====================================================
-      // PESAN BERHASIL
-      // =====================================================
-
-      console.log(
-        "Pesanan berhasil dibuat!"
-      );
-
-    } catch (err) {
+      clearCart();
+    } catch (error) {
       console.error(
         "Gagal membuat pesanan:",
-        err
+        error
       );
 
-      // =====================================================
-      // ERROR LOKASI
-      // =====================================================
-
-      if (
-        err?.type ===
-        "geolocation"
-      ) {
-        if (err.code === 1) {
-          setError(
-            "Akses lokasi ditolak. Silakan izinkan lokasi untuk membuat pesanan."
-          );
-        } else if (
-          err.code === 2
-        ) {
-          setError(
-            "Lokasi kamu tidak dapat ditemukan. Pastikan lokasi/GPS perangkat aktif."
-          );
-        } else if (
-          err.code === 3
-        ) {
-          setError(
-            "Pengambilan lokasi terlalu lama. Silakan coba lagi."
-          );
-        } else {
-          setError(
-            "Lokasi diperlukan untuk membuat pesanan."
-          );
-        }
-
-        return;
-      }
-
-      // =====================================================
-      // ERROR DARI BACKEND
-      // =====================================================
-
-      if (
-        err?.response?.data
-      ) {
-        console.error(
-          "Detail error backend:",
-          err.response.data
-        );
-
-        const backendData =
-          err.response.data;
-
-        // ---------------------------------------------------
-        // PESAN UTAMA BACKEND
-        // ---------------------------------------------------
-
-        if (
-          backendData.message
-        ) {
-          setError(
-            backendData.message
-          );
-
-          return;
-        }
-
-        // ---------------------------------------------------
-        // VALIDATION ERRORS
-        // ---------------------------------------------------
-
-        if (
-          backendData.errors
-        ) {
-          const validationMessages =
-            Object.values(
-              backendData.errors
-            )
-              .flat()
-              .join(" ");
-
-          setError(
-            validationMessages ||
-              "Data pesanan tidak valid."
-          );
-
-          return;
-        }
-      }
-
-      // =====================================================
-      // ERROR UMUM
-      // =====================================================
-
-      setError(
-        err?.message ||
-          "Gagal membuat pesanan. Silakan coba lagi."
+      console.error(
+        "Response error:",
+        error?.response?.data
       );
 
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Pesanan gagal dibuat. Silakan coba lagi.";
+
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   // =========================================================
-  // KERANJANG KOSONG
+  // SUCCESS PAGE
   // =========================================================
 
-  if (cartItems.length === 0) {
+  if (orderSuccess) {
     return (
       <main className="order-page">
+        <div className="container">
 
-        <div className="container order-container">
+          <div className="order-success">
+
+            <div className="order-success-icon">
+              <span>✓</span>
+            </div>
+
+            <span className="order-success-label">
+              ORDER CONFIRMED
+            </span>
+
+            <h1>
+              Pesanan berhasil dibuat!
+            </h1>
+
+            <div className="order-payment-highlight">
+              <strong>
+                Silakan lanjutkan pembayaran
+              </strong>
+
+              <span>
+                di kasir untuk menyelesaikan
+                pesananmu.
+              </span>
+            </div>
+
+            {successOrder?.order_code && (
+              <div className="order-success-code">
+
+                <span>
+                  Kode Pesanan
+                </span>
+
+                <strong>
+                  {
+                    successOrder.order_code
+                  }
+                </strong>
+
+              </div>
+            )}
+
+            <div className="order-success-info">
+
+              {tableCode && (
+                <div className="order-success-info-item">
+
+                  <span>
+                    Meja
+                  </span>
+
+                  <strong>
+                    {
+                      table?.name ||
+                      tableCode
+                    }
+                  </strong>
+
+                </div>
+              )}
+
+              <div className="order-success-info-item">
+
+                <span>
+                  Total Pesanan
+                </span>
+
+                <strong>
+                  Rp{" "}
+                  {Number(
+                    successTotal
+                  ).toLocaleString(
+                    "id-ID"
+                  )}
+                </strong>
+
+              </div>
+
+            </div>
+
+            <div className="order-success-actions">
+
+              <Link
+                to={menuLink}
+                className="order-back-menu"
+              >
+                Kembali ke Menu
+              </Link>
+
+            </div>
+
+          </div>
+
+        </div>
+      </main>
+    );
+  }
+
+  // =========================================================
+  // MAIN PAGE
+  // =========================================================
+
+  return (
+    <main className="order-page">
+
+      <div className="container">
+
+        {/* BACK TO MENU */}
+
+        <Link
+          to={menuLink}
+          className="order-top-back"
+        >
+          <span className="order-top-back-arrow">
+            ←
+          </span>
+
+          <span>
+            Kembali ke menu
+          </span>
+        </Link>
+
+        {/* HEADER */}
+
+        <div className="order-header">
+
+          <span className="order-header-label">
+            YOUR ORDER
+          </span>
+
+          <h1>
+            Konfirmasi Pesanan
+          </h1>
+
+          {tableCode && (
+            <p>
+              Meja{" "}
+              <strong>
+                {
+                  table?.name ||
+                  tableCode
+                }
+              </strong>
+            </p>
+          )}
+
+        </div>
+
+        {/* ERROR */}
+
+        {error && (
+          <div className="order-error">
+            {error}
+          </div>
+        )}
+
+        {/* EMPTY CART */}
+
+        {cartItems.length === 0 ? (
 
           <div className="order-empty">
 
@@ -539,289 +622,77 @@ function OrderPage() {
               🛒
             </div>
 
-            <p className="order-label">
-              YOUR ORDER
-            </p>
-
-            <h1>
-              Pesanan Kosong
-            </h1>
+            <h2>
+              Keranjang masih kosong
+            </h2>
 
             <p>
-              Belum ada menu yang dipilih.
+              Silakan pilih menu terlebih
+              dahulu.
             </p>
 
             <Link
               to={menuLink}
-              className="order-primary-button"
+              className="order-back-menu"
             >
               Kembali ke Menu
-              <span>→</span>
             </Link>
 
           </div>
 
-        </div>
+        ) : (
 
-      </main>
-    );
-  }
+          <div className="order-layout">
 
-  // =========================================================
-  // HALAMAN CHECKOUT
-  // =========================================================
+            {/* =================================================
+                CUSTOMER FORM
+            ================================================= */}
 
-  return (
-    <main className="order-page">
+            <section className="order-form-card">
 
-      <div className="container order-container">
-
-        {/* ===================================================
-            HEADER
-        ==================================================== */}
-
-        <div className="order-page-header">
-
-          <Link
-            to="/cart"
-            className="order-back"
-          >
-            <span>←</span>
-            Kembali ke keranjang
-          </Link>
-
-          <div className="order-title-area">
-
-            <p className="order-label">
-              CHECKOUT
-            </p>
-
-            <h1>
-              Pesan Sekarang
-            </h1>
-
-            <p>
-              Lengkapi informasi pesananmu
-              sebelum melakukan konfirmasi.
-            </p>
-
-          </div>
-
-        </div>
-
-        {/* ===================================================
-            ERROR
-        ==================================================== */}
-
-        {error && (
-          <div className="order-error">
-
-            <span>
-              !
-            </span>
-
-            <div>
-
-              <strong>
-                Periksa kembali data pesanan
-              </strong>
-
-              <p>
-                {error}
-              </p>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ===================================================
-            INFORMASI MEJA
-        ==================================================== */}
-
-        {table && (
-          <div className="order-table-card">
-
-            <div className="order-table-icon">
-              #
-            </div>
-
-            <div>
-
-              <span>
-                YOUR TABLE
-              </span>
-
-              <strong>
-                {table.name ||
-                  table.code ||
-                  "Meja"}
-              </strong>
-
-              <small>
-                Pesanan akan dicatat untuk meja ini.
-              </small>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ===================================================
-            MEJA BELUM TERDETEKSI
-        ==================================================== */}
-
-        {!table && (
-          <div className="order-warning">
-
-            <span>
-              !
-            </span>
-
-            <div>
-
-              <strong>
-                Meja belum terdeteksi
-              </strong>
-
-              <p>
-                Silakan kembali ke menu dan
-                scan QR Code meja.
-              </p>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ===================================================
-            INFORMASI PESANAN
-        ==================================================== */}
-
-        <div className="order-reminder">
-
-          <div className="order-reminder-icon">
-            ℹ
-          </div>
-
-          <div className="order-reminder-content">
-
-            <strong>
-              Informasi Pesanan
-            </strong>
-
-            <p>
-              Setelah pesanan dikonfirmasi,
-              detail pesanan akan diteruskan
-              melalui WhatsApp restoran.
-            </p>
-
-            <p>
-              <strong>
-                Pembayaran dilakukan langsung
-                di kasir.
-              </strong>
-            </p>
-
-          </div>
-
-        </div>
-
-        {/* ===================================================
-            CONTENT
-        ==================================================== */}
-
-        <div className="order-content">
-
-          {/* =================================================
-              DATA PELANGGAN
-          ================================================== */}
-
-          <section className="order-card">
-
-            <div className="order-card-header">
-
-              <div>
+              <div className="order-card-header">
 
                 <span>
-                  STEP 01
+                  01
                 </span>
 
-                <h2>
-                  Data Pelanggan
-                </h2>
+                <div>
+
+                  <small>
+                    CUSTOMER
+                  </small>
+
+                  <h2>
+                    Data Pemesan
+                  </h2>
+
+                </div>
 
               </div>
-
-            </div>
-
-            <div className="order-form">
 
               {/* NAMA */}
 
               <div className="order-form-group">
 
-                <label htmlFor="customer-name">
-
+                <label htmlFor="customerName">
                   Nama
-
-                  <span className="required-mark">
-                    *
-                  </span>
-
                 </label>
 
                 <input
-                  id="customer-name"
+                  id="customerName"
                   type="text"
-                  placeholder="Masukkan nama"
-                  value={name}
-                  onChange={(e) => {
-                    setName(
-                      e.target.value
-                    );
-
-                    setError("");
-                  }}
+                  value={
+                    customerName
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setCustomerName(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Masukkan nama kamu"
                 />
-
-                <small className="required-text">
-                  Nama wajib diisi.
-                </small>
-
-              </div>
-
-              {/* NOMOR WHATSAPP */}
-
-              <div className="order-form-group">
-
-                <label htmlFor="customer-phone">
-
-                  Nomor WhatsApp
-
-                  <span className="required-mark">
-                    *
-                  </span>
-
-                </label>
-
-                <input
-                  id="customer-phone"
-                  type="tel"
-                  placeholder="Contoh: 081234567890"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(
-                      e.target.value
-                    );
-
-                    setError("");
-                  }}
-                />
-
-                <small className="required-text">
-                  Nomor WhatsApp wajib diisi.
-                </small>
 
               </div>
 
@@ -829,300 +700,334 @@ function OrderPage() {
 
               <div className="order-form-group">
 
-                <label htmlFor="order-notes">
-
+                <label htmlFor="note">
                   Catatan Pesanan
-
-                  <span className="optional-mark">
-                    (opsional)
-                  </span>
-
                 </label>
 
                 <textarea
-                  id="order-notes"
-                  rows="4"
-                  placeholder="Contoh: Tidak pakai daun bawang"
-                  value={notes}
-                  onChange={(e) =>
-                    setNotes(
-                      e.target.value
+                  id="note"
+                  value={note}
+                  onChange={(
+                    event
+                  ) =>
+                    setNote(
+                      event.target.value
                     )
                   }
+                  placeholder="Contoh: jangan terlalu pedas..."
+                  rows="4"
                 />
 
-                <small>
-                  Tambahkan catatan jika ada
-                  permintaan khusus.
-                </small>
+              </div>
+
+              {/* LOCATION */}
+
+              <div className="order-location">
+
+                <div>
+
+                  <strong>
+                    Lokasi Pemesan
+                  </strong>
+
+                  <p>
+                    Lokasi digunakan untuk
+                    memastikan kamu berada
+                    di area restoran.
+                  </p>
+
+                </div>
+
+                {latitude === null ||
+                longitude === null ? (
+
+                  <button
+                    type="button"
+                    onClick={
+                      getLocation
+                    }
+                    className="order-location-button"
+                  >
+                    Izinkan Lokasi
+                  </button>
+
+                ) : (
+
+                  <span className="order-location-success">
+                    ✓ Lokasi berhasil
+                  </span>
+
+                )}
 
               </div>
 
-            </div>
+            </section>
 
-          </section>
+            {/* =================================================
+                ORDER SUMMARY
+            ================================================= */}
 
-          {/* =================================================
-              RINGKASAN PESANAN
-          ================================================== */}
+            <section className="order-summary-card">
 
-          <section className="order-card">
-
-            <div className="order-card-header order-summary-header">
-
-              <div>
+              <div className="order-card-header">
 
                 <span>
-                  STEP 02
+                  02
                 </span>
 
-                <h2>
-                  Ringkasan Pesanan
-                </h2>
+                <div>
+
+                  <small>
+                    SUMMARY
+                  </small>
+
+                  <h2>
+                    Ringkasan Pesanan
+                  </h2>
+
+                </div>
 
               </div>
 
-              <span className="order-item-count">
+              {/* ITEMS */}
 
-                {cartItems.reduce(
-                  (total, item) =>
-                    total +
-                    item.quantity,
-                  0
-                )}{" "}
+              <div className="order-items">
 
-                item
+                {cartItems.map(
+                  (
+                    item,
+                    index
+                  ) => (
 
-              </span>
-
-            </div>
-
-            <div className="order-items">
-
-              {cartItems.map(
-                (item, index) => {
-
-                  const variantPrice =
-                    item.variant
-                      ? Number(
-                          item.variant.price
-                        ) || 0
-                      : 0;
-
-                  const addonPrice =
-                    item.addons
-                      ? item.addons.reduce(
-                          (
-                            total,
-                            addon
-                          ) =>
-                            total +
-                            (Number(
-                              addon.price
-                            ) || 0),
-                          0
-                        )
-                      : 0;
-
-                  const unitPrice =
-                    (Number(
-                      item.price
-                    ) || 0) +
-                    variantPrice +
-                    addonPrice;
-
-                  const itemTotal =
-                    unitPrice *
-                    item.quantity;
-
-                  return (
                     <div
-                      key={index}
                       className="order-item"
+                      key={`${item.menuId}-${index}`}
                     >
 
-                      <div className="order-item-main">
+                      <div className="order-item-info">
 
-                        <h3>
+                        <strong>
                           {item.name}
-                        </h3>
-
-                        <div className="order-item-price">
-
-                          {item.quantity} × Rp{" "}
-
-                          {unitPrice.toLocaleString(
-                            "id-ID"
-                          )}
-
-                        </div>
-
-                        {/* VARIANT */}
+                        </strong>
 
                         {item.variant && (
-                          <div className="order-item-option">
-
-                            <span>
-                              Variant
-                            </span>
-
-                            <strong>
-                              {
-                                item
-                                  .variant
-                                  .name
-                              }
-                            </strong>
-
-                          </div>
+                          <small>
+                            {
+                              item.variant.name
+                            }
+                          </small>
                         )}
-
-                        {/* ADD-ON */}
 
                         {item.addons &&
                           item.addons.length >
                             0 && (
 
-                            <div className="order-item-option">
-
-                              <span>
-                                Add-on
-                              </span>
-
-                              <strong>
-                                {item.addons
-                                  .map(
-                                    (
-                                      addon
-                                    ) =>
-                                      addon.name
-                                  )
-                                  .join(
-                                    ", "
-                                  )}
-                              </strong>
-
-                            </div>
+                            <small>
+                              Tambahan:{" "}
+                              {item.addons
+                                .map(
+                                  (
+                                    addon
+                                  ) =>
+                                    addon.name
+                                )
+                                .join(
+                                  ", "
+                                )}
+                            </small>
 
                           )}
 
+                        <span>
+                          {
+                            item.quantity
+                          }{" "}
+                          × Rp{" "}
+                          {Number(
+                            item.price ||
+                              0
+                          ).toLocaleString(
+                            "id-ID"
+                          )}
+                        </span>
+
                       </div>
 
-                      <div className="order-item-total">
+                      <strong className="order-item-price">
 
                         Rp{" "}
-
-                        {itemTotal.toLocaleString(
+                        {Number(
+                          item.totalPrice ||
+                            Number(
+                              item.price ||
+                                0
+                            ) *
+                              Number(
+                                item.quantity ||
+                                  0
+                              )
+                        ).toLocaleString(
                           "id-ID"
                         )}
 
-                      </div>
+                      </strong>
 
                     </div>
-                  );
-                }
+
+                  )
+                )}
+
+              </div>
+
+              {/* =================================================
+                  SUBTOTAL
+              ================================================= */}
+
+              <div className="order-summary-total">
+
+                <span>
+                  Subtotal
+                </span>
+
+                <strong>
+                  Rp{" "}
+                  {Number(
+                    promoPreview?.subtotal ??
+                      total
+                  ).toLocaleString(
+                    "id-ID"
+                  )}
+                </strong>
+
+              </div>
+
+              {/* =================================================
+                  PROMO LOADING
+              ================================================= */}
+
+              {promoLoading && (
+                <div className="order-promo-loading">
+                  Mengecek promo...
+                </div>
               )}
 
-            </div>
+              {/* =================================================
+                  PROMO
+              ================================================= */}
 
-            {/* =================================================
-                TOTAL
-            ================================================== */}
+              {promoPreview?.promo && (
+                <div className="order-promo">
 
-            <div className="order-total">
+                  <div>
 
-              <div>
+                    <span className="order-promo-label">
+                      Promo
+                    </span>
+
+                    <strong>
+                      {
+                        promoPreview
+                          .promo.name
+                      }
+                    </strong>
+
+                  </div>
+
+                  {promoPreview
+                    .promo.code && (
+
+                    <span className="order-promo-code">
+                      {
+                        promoPreview
+                          .promo.code
+                      }
+                    </span>
+
+                  )}
+
+                </div>
+              )}
+
+              {/* =================================================
+                  DISCOUNT
+              ================================================= */}
+
+              {promoPreview?.discount >
+                0 && (
+
+                <div className="order-discount">
+
+                  <span>
+                    Diskon
+                  </span>
+
+                  <strong>
+                    - Rp{" "}
+                    {Number(
+                      promoPreview.discount
+                    ).toLocaleString(
+                      "id-ID"
+                    )}
+                  </strong>
+
+                </div>
+
+              )}
+
+              {/* =================================================
+                  FINAL TOTAL
+              ================================================= */}
+
+              <div className="order-summary-total">
 
                 <span>
                   Total Pesanan
                 </span>
 
-                <small>
-                  Harga sudah termasuk
-                  pilihan menu dan tambahan.
-                </small>
+                <strong>
+                  Rp{" "}
+                  {Number(
+                    promoPreview?.total ??
+                      total
+                  ).toLocaleString(
+                    "id-ID"
+                  )}
+                </strong>
 
               </div>
 
-              <strong>
+              {/* =================================================
+                  SUBMIT
+              ================================================= */}
 
-                Rp{" "}
+              <button
+                type="button"
+                className="order-submit-button"
+                onClick={
+                  handleSubmit
+                }
+                disabled={
+                  loading ||
+                  promoLoading
+                }
+              >
 
-                {grandTotal.toLocaleString(
-                  "id-ID"
-                )}
+                {loading
+                  ? "Memproses Pesanan..."
+                  : "Buat Pesanan"}
 
-              </strong>
+              </button>
 
-            </div>
+              <p className="order-payment-note">
+                Pembayaran dilakukan langsung
+                di kasir setelah pesanan dibuat.
+              </p>
 
-          </section>
+            </section>
 
-        </div>
+          </div>
 
-        {/* ===================================================
-            ACTION
-        ==================================================== */}
-
-        <div className="order-actions">
-
-          <Link
-            to="/cart"
-            className="order-secondary-button"
-          >
-
-            <span>
-              ←
-            </span>
-
-            Kembali
-
-          </Link>
-
-          <button
-            type="button"
-            className="order-primary-button"
-            onClick={handleConfirmOrder}
-            disabled={
-              loading ||
-              !isFormValid
-            }
-          >
-
-            {loading ? (
-              <>
-                <span className="order-spinner" />
-
-                Mengambil lokasi...
-              </>
-            ) : (
-              <>
-                Konfirmasi Pesanan
-
-                <span>
-                  →
-                </span>
-              </>
-            )}
-
-          </button>
-
-        </div>
-
-        {/* ===================================================
-            FOOTER NOTE
-        ==================================================== */}
-
-        <p className="order-footer-note">
-
-          <strong>
-            *
-          </strong>{" "}
-
-          Nama dan nomor WhatsApp wajib diisi.
-          Catatan pesanan bersifat opsional.
-
-        </p>
+        )}
 
       </div>
 

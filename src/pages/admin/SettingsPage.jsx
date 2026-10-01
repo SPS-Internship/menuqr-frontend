@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 import { useAdminProfile } from "../../context/AdminProfileContext";
+
 import {
   getRestaurants,
   updateRestaurant,
 } from "../../services/restaurantService";
+
+import {
+  getAdminSettingsProfile,
+  updateAdminProfile,
+  updateAdminPassword,
+} from "../../services/adminService";
 
 function SettingsPage() {
   const { profile, updateProfile } =
@@ -23,6 +30,34 @@ function SettingsPage() {
     useState(
       profile.photo || null
     );
+
+  const [currentEmail, setCurrentEmail] =
+    useState("");
+
+  const [newEmail, setNewEmail] =
+    useState("");
+
+  const [profileConfirmPassword, setProfileConfirmPassword] =
+    useState("");
+
+  const [profileSaving, setProfileSaving] =
+    useState(false);
+
+  // =========================================================
+  // PASSWORD ADMIN
+  // =========================================================
+
+  const [currentPassword, setCurrentPassword] =
+    useState("");
+
+  const [newPassword, setNewPassword] =
+    useState("");
+
+  const [confirmNewPassword, setConfirmNewPassword] =
+    useState("");
+
+  const [passwordSaving, setPasswordSaving] =
+    useState(false);
 
   // =========================================================
   // DATA RESTAURANT
@@ -54,6 +89,75 @@ function SettingsPage() {
     useState("100");
 
   // =========================================================
+  // AMBIL DATA PROFILE ADMIN
+  // =========================================================
+
+  useEffect(() => {
+    const loadAdminProfile = async () => {
+      try {
+        const response =
+          await getAdminSettingsProfile();
+
+        console.log(
+          "Data profile admin:",
+          response
+        );
+
+        const adminData =
+          response?.data;
+
+        if (adminData) {
+          setAdminName(
+            adminData.name ||
+              "Administrator"
+          );
+
+          setCurrentEmail(
+            adminData.email || ""
+          );
+
+          // -------------------------------------------------
+          // AMBIL FOTO DARI LOCAL STORAGE BERDASARKAN EMAIL
+          // -------------------------------------------------
+
+          const adminEmail =
+            adminData?.email
+              ?.trim()
+              .toLowerCase();
+
+          if (adminEmail) {
+            const photoStorageKey =
+              `adminProfilePhoto_${adminEmail}`;
+
+            const savedProfilePhoto =
+              localStorage.getItem(
+                photoStorageKey
+              );
+
+            if (savedProfilePhoto) {
+              setProfilePhoto(
+                savedProfilePhoto
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error(
+          "Gagal mengambil profile admin:",
+          error
+        );
+
+        console.error(
+          "Detail error backend:",
+          error?.response?.data
+        );
+      }
+    };
+
+    loadAdminProfile();
+  }, []);
+
+  // =========================================================
   // AMBIL DATA RESTAURANT
   // =========================================================
 
@@ -62,6 +166,94 @@ function SettingsPage() {
       try {
         setRestaurantLoading(true);
         setRestaurantError("");
+
+        // ---------------------------------------------------
+        // AMBIL RESTAURANT ID DARI ADMIN YANG SEDANG LOGIN
+        // ---------------------------------------------------
+
+        const savedUser =
+          localStorage.getItem(
+            "adminUser"
+          );
+
+        const savedRestaurant =
+          localStorage.getItem(
+            "adminRestaurant"
+          );
+
+        let adminUser = null;
+        let savedRestaurantData = null;
+
+        // ---------------------------------------------------
+        // BACA adminUser
+        // ---------------------------------------------------
+
+        if (savedUser) {
+          try {
+            adminUser =
+              JSON.parse(
+                savedUser
+              );
+          } catch (error) {
+            console.error(
+              "Gagal membaca adminUser:",
+              error
+            );
+          }
+        }
+
+        // ---------------------------------------------------
+        // BACA adminRestaurant
+        // ---------------------------------------------------
+
+        if (savedRestaurant) {
+          try {
+            savedRestaurantData =
+              JSON.parse(
+                savedRestaurant
+              );
+          } catch (error) {
+            console.error(
+              "Gagal membaca adminRestaurant:",
+              error
+            );
+          }
+        }
+
+        console.log(
+          "Admin yang sedang login:",
+          adminUser
+        );
+
+        console.log(
+          "Restaurant dari localStorage:",
+          savedRestaurantData
+        );
+
+        // ---------------------------------------------------
+        // TENTUKAN RESTAURANT ID AKTIF
+        // ---------------------------------------------------
+
+        const activeRestaurantId =
+          adminUser?.restaurant_id ||
+          savedRestaurantData?.id;
+
+        if (!activeRestaurantId) {
+          setRestaurantError(
+            "Restaurant untuk akun admin ini tidak ditemukan."
+          );
+
+          return;
+        }
+
+        console.log(
+          "Restaurant ID aktif:",
+          activeRestaurantId
+        );
+
+        // ---------------------------------------------------
+        // AMBIL SEMUA DATA RESTAURANT
+        // ---------------------------------------------------
 
         const response =
           await getRestaurants();
@@ -72,32 +264,41 @@ function SettingsPage() {
         );
 
         // ---------------------------------------------------
-        // Normalisasi response
+        // NORMALISASI RESPONSE
         // ---------------------------------------------------
 
         const restaurantList =
           Array.isArray(response)
             ? response
-            : Array.isArray(response?.data)
+            : Array.isArray(
+                response?.data
+              )
             ? response.data
             : response?.data
             ? [response.data]
             : [];
 
+        console.log(
+          "Daftar restaurant:",
+          restaurantList
+        );
+
         // ---------------------------------------------------
-        // Cari Hoshi Ramen
+        // CARI RESTAURANT SESUAI ADMIN YANG LOGIN
         // ---------------------------------------------------
 
         const foundRestaurant =
           restaurantList.find(
             (item) =>
-              Number(item.id) === 4 ||
-              item.slug === "hoshi-ramen"
+              Number(item.id) ===
+              Number(
+                activeRestaurantId
+              )
           );
 
         if (!foundRestaurant) {
           setRestaurantError(
-            "Data restaurant Hoshi Ramen tidak ditemukan."
+            `Data restaurant dengan ID ${activeRestaurantId} tidak ditemukan.`
           );
 
           return;
@@ -108,12 +309,28 @@ function SettingsPage() {
           foundRestaurant
         );
 
+        // ---------------------------------------------------
+        // SIMPAN RESTAURANT AKTIF
+        // ---------------------------------------------------
+
         setRestaurant(
           foundRestaurant
         );
 
         // ---------------------------------------------------
-        // Isi lokasi yang sudah tersimpan
+        // UPDATE adminRestaurant
+        // AGAR SELALU SESUAI DENGAN RESTAURANT AKTIF
+        // ---------------------------------------------------
+
+        localStorage.setItem(
+          "adminRestaurant",
+          JSON.stringify(
+            foundRestaurant
+          )
+        );
+
+        // ---------------------------------------------------
+        // ISI LOKASI YANG SUDAH TERSIMPAN
         // ---------------------------------------------------
 
         setLatitude(
@@ -130,7 +347,6 @@ function SettingsPage() {
           foundRestaurant.location_radius ??
             100
         );
-
       } catch (error) {
         console.error(
           "Gagal mengambil data restaurant:",
@@ -141,7 +357,6 @@ function SettingsPage() {
           error?.response?.data?.message ||
             "Gagal mengambil data restaurant."
         );
-
       } finally {
         setRestaurantLoading(false);
       }
@@ -162,7 +377,10 @@ function SettingsPage() {
 
     if (!file) return;
 
+    // -------------------------------------------------------
     // Maksimal 2 MB
+    // -------------------------------------------------------
+
     if (
       file.size >
       2 * 1024 * 1024
@@ -174,7 +392,10 @@ function SettingsPage() {
       return;
     }
 
+    // -------------------------------------------------------
     // Format foto
+    // -------------------------------------------------------
+
     const allowedTypes = [
       "image/jpeg",
       "image/png",
@@ -192,14 +413,64 @@ function SettingsPage() {
       return;
     }
 
+    // -------------------------------------------------------
     // Ubah menjadi Data URL
+    // -------------------------------------------------------
+
     const reader =
       new FileReader();
 
     reader.onloadend = () => {
+      const photoData =
+        reader.result;
+
+      // Tampilkan foto di halaman
       setProfilePhoto(
-        reader.result
+        photoData
       );
+
+      // -----------------------------------------------------
+      // SIMPAN FOTO BERDASARKAN EMAIL ADMIN
+      // -----------------------------------------------------
+
+      const savedUser =
+        localStorage.getItem(
+          "adminUser"
+        );
+
+      if (savedUser) {
+        try {
+          const adminUser =
+            JSON.parse(
+              savedUser
+            );
+
+          const adminEmail =
+            adminUser?.email
+              ?.trim()
+              .toLowerCase();
+
+          if (adminEmail) {
+            const photoStorageKey =
+              `adminProfilePhoto_${adminEmail}`;
+
+            localStorage.setItem(
+              photoStorageKey,
+              photoData
+            );
+
+            console.log(
+              "Foto profil berhasil disimpan:",
+              photoStorageKey
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Gagal menyimpan foto profil:",
+            error
+          );
+        }
+      }
     };
 
     reader.readAsDataURL(file);
@@ -209,21 +480,293 @@ function SettingsPage() {
   // SIMPAN PROFILE ADMIN
   // =========================================================
 
-  const handleSaveProfile = (
-    event
-  ) => {
-    event.preventDefault();
+  const handleSaveProfile =
+    async (event) => {
+      event.preventDefault();
 
-    updateProfile({
-      ...profile,
-      name: adminName,
-      photo: profilePhoto,
-    });
+      try {
+        setProfileSaving(true);
 
-    alert(
-      "Perubahan profil berhasil disimpan."
-    );
-  };
+        // ---------------------------------------------------
+        // Validasi nama
+        // ---------------------------------------------------
+
+        if (!adminName.trim()) {
+          alert(
+            "Nama admin wajib diisi."
+          );
+
+          return;
+        }
+
+        // ---------------------------------------------------
+        // Tentukan email yang akan disimpan
+        // ---------------------------------------------------
+
+        const emailToSave =
+          newEmail.trim() ||
+          currentEmail;
+
+        if (!emailToSave) {
+          alert(
+            "Email wajib diisi."
+          );
+
+          return;
+        }
+
+        // ---------------------------------------------------
+        // Update nama + email ke backend
+        // ---------------------------------------------------
+
+        const response =
+          await updateAdminProfile({
+            name: adminName.trim(),
+            email: emailToSave,
+          });
+
+        console.log(
+          "Response update profile:",
+          response
+        );
+
+        // ---------------------------------------------------
+        // SIMPAN FOTO BERDASARKAN EMAIL
+        // ---------------------------------------------------
+
+        if (profilePhoto) {
+          const adminEmail =
+            emailToSave
+              .trim()
+              .toLowerCase();
+
+          if (adminEmail) {
+            const photoStorageKey =
+              `adminProfilePhoto_${adminEmail}`;
+
+            localStorage.setItem(
+              photoStorageKey,
+              profilePhoto
+            );
+
+            console.log(
+              "Foto profil berhasil disimpan:",
+              photoStorageKey
+            );
+          }
+        }
+
+        // ---------------------------------------------------
+        // Update context agar sidebar ikut berubah
+        // ---------------------------------------------------
+
+        updateProfile({
+          ...profile,
+          name: adminName.trim(),
+          email: emailToSave,
+          photo: profilePhoto,
+        });
+
+        // ---------------------------------------------------
+        // Update state email
+        // ---------------------------------------------------
+
+        setCurrentEmail(
+          emailToSave
+        );
+
+        setNewEmail("");
+
+        setProfileConfirmPassword(
+          ""
+        );
+
+        alert(
+          "Nama dan email berhasil diperbarui."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal menyimpan profile admin:",
+          error
+        );
+
+        console.error(
+          "Detail error backend:",
+          error?.response?.data
+        );
+
+        const backendMessage =
+          error?.response?.data?.message;
+
+        const backendErrors =
+          error?.response?.data?.errors;
+
+        if (backendErrors) {
+          const messages =
+            Object.values(
+              backendErrors
+            )
+              .flat()
+              .join(" ");
+
+          alert(
+            messages ||
+              "Data profile tidak valid."
+          );
+        } else {
+          alert(
+            backendMessage ||
+              "Gagal menyimpan profile admin."
+          );
+        }
+      } finally {
+        setProfileSaving(false);
+      }
+    };
+
+  // =========================================================
+  // SIMPAN PASSWORD ADMIN
+  // =========================================================
+
+  const handleSavePassword =
+    async (event) => {
+      event.preventDefault();
+
+      if (!currentPassword) {
+        alert(
+          "Password saat ini wajib diisi."
+        );
+
+        return;
+      }
+
+      if (!newPassword) {
+        alert(
+          "Password baru wajib diisi."
+        );
+
+        return;
+      }
+
+      if (
+        newPassword.length < 8
+      ) {
+        alert(
+          "Password baru minimal 8 karakter."
+        );
+
+        return;
+      }
+
+      if (!confirmNewPassword) {
+        alert(
+          "Konfirmasi password baru wajib diisi."
+        );
+
+        return;
+      }
+
+      if (
+        newPassword !==
+        confirmNewPassword
+      ) {
+        alert(
+          "Konfirmasi password baru tidak sama."
+        );
+
+        return;
+      }
+
+      try {
+        setPasswordSaving(true);
+
+        const response =
+          await updateAdminPassword({
+            current_password:
+              currentPassword,
+
+            password:
+              newPassword,
+
+            password_confirmation:
+              confirmNewPassword,
+          });
+
+        console.log(
+          "Response update password:",
+          response
+        );
+
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmNewPassword("");
+
+        alert(
+          "Password berhasil diubah."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal mengubah password:",
+          error
+        );
+
+        console.error(
+          "Detail error backend:",
+          error?.response?.data
+        );
+
+        const backendMessage =
+          error?.response?.data?.message;
+
+        const backendErrors =
+          error?.response?.data?.errors;
+
+        if (backendErrors) {
+          const messages =
+            Object.values(
+              backendErrors
+            )
+              .flat()
+              .join(" ");
+
+          alert(
+            messages ||
+              "Password tidak dapat diubah."
+          );
+        } else {
+          alert(
+            backendMessage ||
+              "Gagal mengubah password."
+          );
+        }
+      } finally {
+        setPasswordSaving(false);
+      }
+    };
+
+  // =========================================================
+  // BATAL PERUBAHAN PROFILE
+  // =========================================================
+
+  const handleCancelProfile =
+    () => {
+      setAdminName(
+        profile.name ||
+          "Administrator"
+      );
+
+      setCurrentEmail(
+        profile.email || currentEmail
+      );
+
+      setNewEmail("");
+
+      setProfilePhoto(
+        profile.photo || null
+      );
+
+      setProfileConfirmPassword("");
+    };
 
   // =========================================================
   // SIMPAN LOKASI RESTAURANT
@@ -234,7 +777,7 @@ function SettingsPage() {
       event.preventDefault();
 
       // -----------------------------------------------------
-      // Validasi latitude
+      // Validasi latitude dan longitude
       // -----------------------------------------------------
 
       if (
@@ -262,7 +805,7 @@ function SettingsPage() {
         Number(locationRadius);
 
       // -----------------------------------------------------
-      // Validasi angka
+      // Validasi latitude
       // -----------------------------------------------------
 
       if (
@@ -279,6 +822,10 @@ function SettingsPage() {
         return;
       }
 
+      // -----------------------------------------------------
+      // Validasi longitude
+      // -----------------------------------------------------
+
       if (
         Number.isNaN(
           longitudeNumber
@@ -293,6 +840,10 @@ function SettingsPage() {
         return;
       }
 
+      // -----------------------------------------------------
+      // Validasi radius
+      // -----------------------------------------------------
+
       if (
         Number.isNaN(
           radiusNumber
@@ -305,6 +856,10 @@ function SettingsPage() {
 
         return;
       }
+
+      // -----------------------------------------------------
+      // Pastikan restaurant tersedia
+      // -----------------------------------------------------
 
       if (!restaurant?.id) {
         setRestaurantError(
@@ -359,18 +914,45 @@ function SettingsPage() {
 
         setRestaurant({
           ...restaurant,
+
           latitude:
             latitudeNumber,
+
           longitude:
             longitudeNumber,
+
           location_radius:
             radiusNumber,
         });
 
+        // ---------------------------------------------------
+        // Update localStorage agar data restaurant aktif
+        // juga ikut terbaru
+        // ---------------------------------------------------
+
+        const updatedRestaurant = {
+          ...restaurant,
+
+          latitude:
+            latitudeNumber,
+
+          longitude:
+            longitudeNumber,
+
+          location_radius:
+            radiusNumber,
+        };
+
+        localStorage.setItem(
+          "adminRestaurant",
+          JSON.stringify(
+            updatedRestaurant
+          )
+        );
+
         alert(
           "Lokasi restaurant berhasil disimpan."
         );
-
       } catch (error) {
         console.error(
           "Gagal menyimpan lokasi restaurant:",
@@ -382,19 +964,13 @@ function SettingsPage() {
           error?.response?.data
         );
 
-        // ---------------------------------------------------
-        // Ambil pesan error backend
-        // ---------------------------------------------------
-
         const backendMessage =
           error?.response?.data?.message;
 
         const backendErrors =
           error?.response?.data?.errors;
 
-        if (
-          backendErrors
-        ) {
+        if (backendErrors) {
           const messages =
             Object.values(
               backendErrors
@@ -412,7 +988,6 @@ function SettingsPage() {
               "Gagal menyimpan lokasi restaurant."
           );
         }
-
       } finally {
         setRestaurantSaving(
           false
@@ -434,7 +1009,6 @@ function SettingsPage() {
           "#f7f5f6",
       }}
     >
-
       {/* =====================================================
           SIDEBAR
       ====================================================== */}
@@ -456,15 +1030,12 @@ function SettingsPage() {
             "border-box",
         }}
       >
-
         {/* ===================================================
             HEADER
         ==================================================== */}
 
         <div className="settings-header">
-
           <div>
-
             <h1>
               Pengaturan
             </h1>
@@ -473,9 +1044,7 @@ function SettingsPage() {
               Kelola informasi akun
               dan pengaturan restoran.
             </p>
-
           </div>
-
         </div>
 
         {/* ===================================================
@@ -487,15 +1056,12 @@ function SettingsPage() {
             handleSaveProfile
           }
         >
-
           {/* =================================================
               FOTO PROFIL
           ================================================== */}
 
           <section className="settings-section">
-
             <div className="settings-section-header">
-
               <h2>
                 Foto Profil
               </h2>
@@ -505,13 +1071,10 @@ function SettingsPage() {
                 untuk memudahkan
                 identifikasi akun admin.
               </p>
-
             </div>
 
             <div className="profile-photo-area">
-
               <div className="profile-photo">
-
                 {profilePhoto ? (
                   <img
                     src={
@@ -529,11 +1092,9 @@ function SettingsPage() {
                       .toUpperCase()}
                   </span>
                 )}
-
               </div>
 
               <div className="profile-photo-info">
-
                 <strong>
                   Foto Profil Administrator
                 </strong>
@@ -545,7 +1106,6 @@ function SettingsPage() {
                 </p>
 
                 <label className="change-photo-button">
-
                   Ganti Foto
 
                   <input
@@ -556,13 +1116,9 @@ function SettingsPage() {
                     }
                     hidden
                   />
-
                 </label>
-
               </div>
-
             </div>
-
           </section>
 
           {/* =================================================
@@ -570,9 +1126,7 @@ function SettingsPage() {
           ================================================== */}
 
           <section className="settings-section">
-
             <div className="settings-section-header">
-
               <h2>
                 Informasi Akun
               </h2>
@@ -581,13 +1135,12 @@ function SettingsPage() {
                 Kelola informasi akun
                 administrator.
               </p>
-
             </div>
 
             <div className="settings-grid">
+              {/* NAMA ADMIN */}
 
               <div className="settings-field">
-
                 <label>
                   Nama Admin
                 </label>
@@ -607,118 +1160,72 @@ function SettingsPage() {
                   }
                   placeholder="Masukkan nama admin"
                 />
-
               </div>
 
-              <div className="settings-field">
+              {/* EMAIL SAAT INI */}
 
+              <div className="settings-field">
                 <label>
                   Email Saat Ini
                 </label>
 
                 <input
                   type="email"
-                  defaultValue="admin@hoshiramen.com"
+                  value={
+                    currentEmail
+                  }
                   disabled
                 />
-
               </div>
 
-              <div className="settings-field">
+              {/* EMAIL BARU */}
 
+              <div className="settings-field">
                 <label>
                   Email Baru
                 </label>
 
                 <input
                   type="email"
+                  value={
+                    newEmail
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setNewEmail(
+                      event.target
+                        .value
+                    )
+                  }
                   placeholder="Masukkan email baru"
                 />
-
               </div>
 
-              <div className="settings-field">
+              {/* KONFIRMASI PASSWORD */}
 
+              <div className="settings-field">
                 <label>
                   Konfirmasi Password
                 </label>
 
                 <input
                   type="password"
+                  value={
+                    profileConfirmPassword
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setProfileConfirmPassword(
+                      event.target
+                        .value
+                    )
+                  }
                   placeholder="Masukkan password untuk konfirmasi"
                 />
-
               </div>
-
             </div>
-
-          </section>
-
-          {/* =================================================
-              UBAH PASSWORD
-          ================================================== */}
-
-          <section className="settings-section">
-
-            <div className="settings-section-header">
-
-              <h2>
-                Ubah Password
-              </h2>
-
-              <p>
-                Pastikan password baru
-                berbeda dari password
-                sebelumnya.
-              </p>
-
-            </div>
-
-            <div className="settings-grid settings-password-grid">
-
-              <div className="settings-field">
-
-                <label>
-                  Password Saat Ini
-                </label>
-
-                <input
-                  type="password"
-                  placeholder="Masukkan password saat ini"
-                />
-
-              </div>
-
-              <div />
-
-              <div className="settings-field">
-
-                <label>
-                  Password Baru
-                </label>
-
-                <input
-                  type="password"
-                  placeholder="Masukkan password baru"
-                />
-
-              </div>
-
-              <div className="settings-field">
-
-                <label>
-                  Konfirmasi Password Baru
-                </label>
-
-                <input
-                  type="password"
-                  placeholder="Ulangi password baru"
-                />
-
-              </div>
-
-            </div>
-
           </section>
 
           {/* =================================================
@@ -726,10 +1233,12 @@ function SettingsPage() {
           ================================================== */}
 
           <div className="settings-actions">
-
             <button
               type="button"
               className="settings-cancel-button"
+              onClick={
+                handleCancelProfile
+              }
             >
               Batal
             </button>
@@ -737,33 +1246,157 @@ function SettingsPage() {
             <button
               type="submit"
               className="settings-save-button"
+              disabled={
+                profileSaving
+              }
             >
-              Simpan Perubahan
+              {profileSaving
+                ? "Menyimpan..."
+                : "Simpan Perubahan"}
             </button>
+          </div>
+        </form>
 
+        {/* ===================================================
+            UBAH PASSWORD
+        ==================================================== */}
+
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <h2>
+              Ubah Password
+            </h2>
+
+            <p>
+              Pastikan password baru
+              berbeda dari password
+              sebelumnya.
+            </p>
           </div>
 
-        </form>
+          <form
+            onSubmit={
+              handleSavePassword
+            }
+          >
+            <div className="settings-grid settings-password-grid">
+              {/* PASSWORD SAAT INI */}
+
+              <div className="settings-field">
+                <label>
+                  Password Saat Ini
+                </label>
+
+                <input
+                  type="password"
+                  value={
+                    currentPassword
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setCurrentPassword(
+                      event.target
+                        .value
+                    )
+                  }
+                  placeholder="Masukkan password saat ini"
+                />
+              </div>
+
+              <div />
+
+              {/* PASSWORD BARU */}
+
+              <div className="settings-field">
+                <label>
+                  Password Baru
+                </label>
+
+                <input
+                  type="password"
+                  value={
+                    newPassword
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setNewPassword(
+                      event.target
+                        .value
+                    )
+                  }
+                  placeholder="Masukkan password baru"
+                />
+
+                <small>
+                  Minimal 8 karakter.
+                </small>
+              </div>
+
+              {/* KONFIRMASI PASSWORD BARU */}
+
+              <div className="settings-field">
+                <label>
+                  Konfirmasi Password Baru
+                </label>
+
+                <input
+                  type="password"
+                  value={
+                    confirmNewPassword
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setConfirmNewPassword(
+                      event.target
+                        .value
+                    )
+                  }
+                  placeholder="Ulangi password baru"
+                />
+              </div>
+            </div>
+
+            {/* =================================================
+                BUTTON PASSWORD
+            ================================================== */}
+
+            <div className="settings-actions">
+              <button
+                type="submit"
+                className="settings-save-button"
+                disabled={
+                  passwordSaving
+                }
+              >
+                {passwordSaving
+                  ? "Mengubah Password..."
+                  : "Simpan Password"}
+              </button>
+            </div>
+          </form>
+        </section>
 
         {/* ===================================================
             LOKASI RESTAURANT
         ==================================================== */}
 
         <section className="settings-section restaurant-location-section">
-
           <div className="settings-section-header">
-
             <h2>
               Lokasi Restoran
             </h2>
 
             <p>
-              Atur lokasi Hoshi Ramen
+              Atur lokasi{" "}
+              {restaurant?.name ||
+                "restoran"}{" "}
               yang digunakan untuk
               memvalidasi jarak pelanggan
               saat melakukan pemesanan.
             </p>
-
           </div>
 
           {/* =================================================
@@ -803,13 +1436,10 @@ function SettingsPage() {
                   handleSaveLocation
                 }
               >
-
                 {/* INFO RESTAURANT */}
 
                 <div className="restaurant-location-info">
-
                   <div>
-
                     <span>
                       RESTAURANT
                     </span>
@@ -819,11 +1449,9 @@ function SettingsPage() {
                         restaurant.name
                       }
                     </strong>
-
                   </div>
 
                   <div>
-
                     <span>
                       ID RESTAURANT
                     </span>
@@ -833,23 +1461,17 @@ function SettingsPage() {
                         restaurant.id
                       }
                     </strong>
-
                   </div>
-
                 </div>
 
                 {/* INPUT LOCATION */}
 
                 <div className="settings-grid">
-
                   {/* LATITUDE */}
 
                   <div className="settings-field">
-
                     <label htmlFor="restaurant-latitude">
-
                       Latitude
-
                     </label>
 
                     <input
@@ -874,17 +1496,13 @@ function SettingsPage() {
                       Nilai antara -90
                       sampai 90.
                     </small>
-
                   </div>
 
                   {/* LONGITUDE */}
 
                   <div className="settings-field">
-
                     <label htmlFor="restaurant-longitude">
-
                       Longitude
-
                     </label>
 
                     <input
@@ -909,21 +1527,16 @@ function SettingsPage() {
                       Nilai antara -180
                       sampai 180.
                     </small>
-
                   </div>
 
                   {/* RADIUS */}
 
                   <div className="settings-field">
-
                     <label htmlFor="restaurant-radius">
-
                       Radius Lokasi
-
                     </label>
 
                     <div className="settings-input-with-unit">
-
                       <input
                         id="restaurant-radius"
                         type="number"
@@ -945,16 +1558,13 @@ function SettingsPage() {
                       <span>
                         meter
                       </span>
-
                     </div>
 
                     <small>
                       Jarak maksimal pelanggan
                       dari restoran.
                     </small>
-
                   </div>
-
                 </div>
 
                 {/* =================================================
@@ -962,13 +1572,11 @@ function SettingsPage() {
                 ================================================== */}
 
                 <div className="restaurant-location-note">
-
                   <span>
                     ℹ
                   </span>
 
                   <div>
-
                     <strong>
                       Cara kerja lokasi
                     </strong>
@@ -982,9 +1590,7 @@ function SettingsPage() {
                       restoran dan radius yang kamu
                       tentukan di sini.
                     </p>
-
                   </div>
-
                 </div>
 
                 {/* =================================================
@@ -992,7 +1598,6 @@ function SettingsPage() {
                 ================================================== */}
 
                 <div className="settings-actions">
-
                   <button
                     type="submit"
                     className="settings-save-button"
@@ -1000,22 +1605,15 @@ function SettingsPage() {
                       restaurantSaving
                     }
                   >
-
                     {restaurantSaving
                       ? "Menyimpan..."
                       : "Simpan Lokasi Restoran"}
-
                   </button>
-
                 </div>
-
               </form>
             )}
-
         </section>
-
       </main>
-
     </div>
   );
 }

@@ -1,8 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAdminProfile } from "../../context/AdminProfileContext";
+import api from "../../services/api";
 
 function AdminSidebar() {
   const { profile } = useAdminProfile();
+  const navigate = useNavigate();
+
+  // Data restoran dari AdminProfileContext
+  const restaurant = profile?.restaurant;
 
   const menuItems = [
     { label: "Dashboard", path: "/admin/dashboard", icon: "⌂" },
@@ -15,6 +20,77 @@ function AdminSidebar() {
     { label: "Promo", path: "/admin/promo", icon: "%" },
     { label: "Report", path: "/admin/report", icon: "↗" },
   ];
+
+  const handleLogout = async () => {
+    // ==========================================
+    // AMBIL RESTORAN AKTIF SEBELUM LOGOUT
+    // ==========================================
+
+    let restaurantSlug = null;
+
+    const savedRestaurant =
+      localStorage.getItem("adminRestaurant");
+
+    if (savedRestaurant) {
+      try {
+        const parsedRestaurant =
+          JSON.parse(savedRestaurant);
+
+        restaurantSlug =
+          parsedRestaurant?.slug || null;
+      } catch (error) {
+        console.error(
+          "Gagal membaca adminRestaurant:",
+          error
+        );
+      }
+    }
+
+    // Kalau adminRestaurant tidak tersedia,
+    // coba ambil dari profile sebagai cadangan
+    if (!restaurantSlug) {
+      restaurantSlug = restaurant?.slug || null;
+    }
+
+    try {
+      await api.post("/logout");
+    } catch (error) {
+      console.error(
+        "Logout backend gagal:",
+        error
+      );
+    } finally {
+      // ==========================================
+      // HAPUS DATA LOGIN ADMIN
+      // ==========================================
+
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("adminProfile");
+      localStorage.removeItem("adminUser");
+      localStorage.removeItem("adminRestaurant");
+
+      // ==========================================
+      // KEMBALI KE LOGIN RESTORAN YANG AKTIF
+      // ==========================================
+
+      if (restaurantSlug) {
+        navigate(
+          `/admin/login/${restaurantSlug}`,
+          {
+            replace: true,
+          }
+        );
+      } else {
+        // Fallback jika slug restoran tidak tersedia
+        navigate(
+          "/admin/login/hoshi-ramen",
+          {
+            replace: true,
+          }
+        );
+      }
+    }
+  };
 
   return (
     <aside
@@ -32,49 +108,86 @@ function AdminSidebar() {
         padding: "24px 16px",
         boxSizing: "border-box",
         overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      {/* LOGO / RESTORAN */}
-
+      {/* LOGO RESTAURANT */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "12px",
-          marginBottom: "35px",
+          gap: "14px",
+          marginBottom: "38px",
         }}
       >
         <div
           style={{
-            width: "42px",
-            height: "42px",
-            borderRadius: "10px",
-            backgroundColor: "#8f2638",
+            width: "48px",
+            height: "48px",
+            backgroundColor: "#9f2740",
+            borderRadius: "12px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontWeight: "700",
+            overflow: "hidden",
+            flexShrink: 0,
           }}
         >
-          HR
+          {restaurant?.logo ? (
+            <img
+              src={restaurant.logo}
+              alt={restaurant?.name || "Restaurant"}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                fontSize: "18px",
+                fontWeight: "700",
+              }}
+            >
+              {restaurant?.name
+                ? restaurant.name
+                    .split(" ")
+                    .map((word) => word[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()
+                : "R"}
+            </span>
+          )}
         </div>
 
-        <div>
+        <div
+          style={{
+            minWidth: 0,
+            overflow: "hidden",
+          }}
+        >
           <div
             style={{
-              fontSize: "15px",
+              fontSize: "16px",
               fontWeight: "700",
+              marginBottom: "4px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: "145px",
             }}
           >
-            Hoshi Ramen
+            {restaurant?.name || "Restaurant"}
           </div>
 
           <div
             style={{
-              fontSize: "10px",
-              opacity: 0.6,
+              fontSize: "11px",
+              color: "#a7a1a3",
               letterSpacing: "1px",
-              marginTop: "3px",
             }}
           >
             ADMIN PANEL
@@ -83,14 +196,13 @@ function AdminSidebar() {
       </div>
 
       {/* MAIN MENU */}
-
       <div
         style={{
-          fontSize: "10px",
+          fontSize: "11px",
           fontWeight: "700",
+          color: "#858082",
           letterSpacing: "1.5px",
-          opacity: 0.45,
-          marginBottom: "10px",
+          marginBottom: "12px",
         }}
       >
         MAIN MENU
@@ -104,23 +216,23 @@ function AdminSidebar() {
             style={({ isActive }) => ({
               display: "flex",
               alignItems: "center",
-              gap: "12px",
+              gap: "18px",
+              padding: "16px 18px",
+              marginBottom: "4px",
+              borderRadius: "9px",
               textDecoration: "none",
-              color: "#ffffff",
-              padding: "11px 12px",
-              borderRadius: "8px",
-              marginBottom: "5px",
+              color: isActive ? "#ffffff" : "#c5c0c2",
               backgroundColor: isActive
-                ? "#8f2638"
+                ? "#9f2740"
                 : "transparent",
-              opacity: isActive ? 1 : 0.75,
               fontSize: "14px",
               fontWeight: isActive ? "600" : "400",
+              transition: "0.2s",
             })}
           >
             <span
               style={{
-                width: "24px",
+                width: "18px",
                 textAlign: "center",
                 fontSize: "17px",
               }}
@@ -134,13 +246,12 @@ function AdminSidebar() {
       </nav>
 
       {/* SYSTEM */}
-
       <div
         style={{
-          fontSize: "10px",
+          fontSize: "11px",
           fontWeight: "700",
+          color: "#858082",
           letterSpacing: "1.5px",
-          opacity: 0.45,
           marginTop: "28px",
           marginBottom: "10px",
         }}
@@ -148,27 +259,27 @@ function AdminSidebar() {
         SYSTEM
       </div>
 
+      {/* SETTINGS */}
       <NavLink
         to="/admin/settings"
         style={({ isActive }) => ({
           display: "flex",
           alignItems: "center",
-          gap: "12px",
+          gap: "18px",
+          padding: "14px 18px",
+          borderRadius: "9px",
           textDecoration: "none",
-          color: "#ffffff",
-          padding: "11px 12px",
-          borderRadius: "8px",
+          color: isActive ? "#ffffff" : "#c5c0c2",
           backgroundColor: isActive
-            ? "#8f2638"
+            ? "#9f2740"
             : "transparent",
-          opacity: isActive ? 1 : 0.75,
           fontSize: "14px",
-          fontWeight: isActive ? "600" : "400",
+          marginBottom: "16px",
         })}
       >
         <span
           style={{
-            width: "24px",
+            width: "18px",
             textAlign: "center",
             fontSize: "17px",
           }}
@@ -179,85 +290,119 @@ function AdminSidebar() {
         <span>Settings</span>
       </NavLink>
 
-      {/* ADMIN PROFILE */}
+      {/* SPACER */}
+      <div style={{ flex: 1 }} />
 
+      {/* PROFILE + LOGOUT */}
       <div
         style={{
-          position: "absolute",
-          left: "16px",
-          right: "16px",
-          bottom: "20px",
           paddingTop: "16px",
-          borderTop: "1px solid rgba(255,255,255,0.1)",
+          borderTop:
+            "1px solid rgba(255,255,255,0.1)",
         }}
       >
+        {/* PROFILE */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "10px",
+            marginBottom: "12px",
           }}
         >
-          {/* FOTO PROFIL */}
+          <img
+            src={
+              profile?.photo ||
+              "https://ui-avatars.com/api/?name=Admin&background=9f2740&color=fff"
+            }
+            alt="Admin"
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              objectFit: "cover",
+              flexShrink: 0,
+            }}
+          />
 
           <div
             style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "50%",
-              backgroundColor: "#8f2638",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: "700",
+              minWidth: 0,
               overflow: "hidden",
-              flexShrink: 0,
             }}
           >
-            {profile.photo ? (
-              <img
-                src={profile.photo}
-                alt="Foto profil admin"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <span>
-                {(profile.name || "Admin")
-                  .charAt(0)
-                  .toUpperCase()}
-              </span>
-            )}
-          </div>
-
-          {/* NAMA ADMIN */}
-
-          <div>
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "14px",
                 fontWeight: "600",
+                color: "#ffffff",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
-              {profile.name || "Admin"}
+              {profile?.name || "Admin"}
             </div>
 
             <div
               style={{
                 fontSize: "11px",
-                opacity: 0.5,
+                color: "#9f999b",
+                marginTop: "2px",
               }}
             >
-              {profile.role || "Administrator"}
+              {profile?.role || "Administrator"}
             </div>
           </div>
         </div>
+
+        {/* LOGOUT */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: "18px",
+            border: "none",
+            backgroundColor: "transparent",
+            color: "#c5c0c2",
+            padding: "12px 18px",
+            borderRadius: "9px",
+            cursor: "pointer",
+            fontSize: "14px",
+            textAlign: "left",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor =
+              "#9f2740";
+            e.currentTarget.style.color =
+              "#ffffff";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor =
+              "transparent";
+            e.currentTarget.style.color =
+              "#c5c0c2";
+          }}
+        >
+          <span
+            style={{
+              width: "18px",
+              textAlign: "center",
+              fontSize: "17px",
+            }}
+          >
+            ↪
+          </span>
+
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
   );
 }
 
 export default AdminSidebar;
+

@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 import api from "../../services/api";
+import { useAdminProfile } from "../../context/AdminProfileContext";
 
 function DashboardPage() {
+  const { profile } = useAdminProfile();
+
+  // =========================
+  // RESTORAN AKTIF
+  // =========================
+
+  const restaurantName =
+    profile?.restaurant?.name || "Restaurant";
+
   const [dashboard, setDashboard] = useState({
     total_orders: 0,
     pending_orders: 0,
@@ -189,8 +199,8 @@ function DashboardPage() {
               fontSize: "14px",
             }}
           >
-            Ringkasan data pesanan dan penjualan
-            Hoshi Ramen.
+            Ringkasan data pesanan dan penjualan{" "}
+            {restaurantName}.
           </p>
         </div>
 

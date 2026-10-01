@@ -9,7 +9,7 @@ import {
 } from "../../services/menuService";
 
 function MenuDetailPage() {
-  const { id } = useParams();
+  const { slug, id } = useParams();
   const { addToCart } = useCart();
 
   // =========================
@@ -40,7 +40,9 @@ function MenuDetailPage() {
 
   useEffect(() => {
     try {
-      const savedTable = localStorage.getItem("restaurantTable");
+      const savedTable = localStorage.getItem(
+        "restaurantTable"
+      );
 
       if (!savedTable) {
         setTable(null);
@@ -57,7 +59,11 @@ function MenuDetailPage() {
 
       setTable(tableData);
     } catch (error) {
-      console.error("Gagal membaca data meja:", error);
+      console.error(
+        "Gagal membaca data meja:",
+        error
+      );
+
       setTable(null);
     }
   }, []);
@@ -82,9 +88,20 @@ function MenuDetailPage() {
           getMenuAddons(id),
         ]);
 
-        console.log("Detail menu:", menuData);
-        console.log("Variant menu:", variantData);
-        console.log("Add-on menu:", addonData);
+        console.log(
+          "Detail menu:",
+          menuData
+        );
+
+        console.log(
+          "Variant menu:",
+          variantData
+        );
+
+        console.log(
+          "Add-on menu:",
+          addonData
+        );
 
         // =========================
         // DATA MENU
@@ -103,7 +120,9 @@ function MenuDetailPage() {
         const variantResult =
           Array.isArray(variantData)
             ? variantData
-            : Array.isArray(variantData?.data)
+            : Array.isArray(
+                variantData?.data
+              )
               ? variantData.data
               : [];
 
@@ -116,7 +135,9 @@ function MenuDetailPage() {
         const addonResult =
           Array.isArray(addonData)
             ? addonData
-            : Array.isArray(addonData?.data)
+            : Array.isArray(
+                addonData?.data
+              )
               ? addonData.data
               : [];
 
@@ -135,7 +156,9 @@ function MenuDetailPage() {
       }
     };
 
-    fetchMenuDetail();
+    if (id) {
+      fetchMenuDetail();
+    }
   }, [id]);
 
   // =========================
@@ -276,22 +299,30 @@ function MenuDetailPage() {
     }
   };
 
+  // =========================
+  // RETURN KE MENU RESTORAN
+  // =========================
+
+  const menuBackLink = table?.code
+    ? `/menu/${slug}?table=${table.code}`
+    : `/menu/${slug}`;
+
+  // =========================
+  // RENDER
+  // =========================
+
   return (
     <main className="detail-page">
 
       {/* =========================
           HEADER
-      ========================== */}
+          ========================== */}
 
       <div className="detail-top">
         <div className="container">
 
           <Link
-            to={
-              table?.code
-                ? `/?table=${table.code}`
-                : "/"
-            }
+            to={menuBackLink}
             className="detail-back"
           >
             ← Kembali ke menu
@@ -302,7 +333,7 @@ function MenuDetailPage() {
 
       {/* =========================
           DETAIL CONTENT
-      ========================== */}
+          ========================== */}
 
       <div className="container detail-container">
 
@@ -310,7 +341,7 @@ function MenuDetailPage() {
 
           {/* =========================
               FOTO
-          ========================== */}
+              ========================== */}
 
           <div className="detail-image-wrapper">
 
@@ -322,6 +353,7 @@ function MenuDetailPage() {
               />
             ) : (
               <div className="detail-image-placeholder">
+
                 <span>
                   🍜
                 </span>
@@ -329,6 +361,7 @@ function MenuDetailPage() {
                 <p>
                   Foto Menu
                 </p>
+
               </div>
             )}
 
@@ -336,7 +369,7 @@ function MenuDetailPage() {
 
           {/* =========================
               INFORMASI
-          ========================== */}
+              ========================== */}
 
           <div className="detail-info">
 
@@ -362,12 +395,13 @@ function MenuDetailPage() {
 
             {/* =========================
                 VARIANT
-            ========================== */}
+                ========================== */}
 
             {variants.length > 0 && (
               <section className="detail-section">
 
                 <div className="detail-section-title">
+
                   <h2>
                     Pilih Variant
                   </h2>
@@ -375,6 +409,7 @@ function MenuDetailPage() {
                   <span>
                     Wajib pilih
                   </span>
+
                 </div>
 
                 <div className="variant-list">
@@ -432,12 +467,13 @@ function MenuDetailPage() {
 
             {/* =========================
                 ADD-ON
-            ========================== */}
+                ========================== */}
 
             {addons.length > 0 && (
               <section className="detail-section">
 
                 <div className="detail-section-title">
+
                   <h2>
                     Tambahan
                   </h2>
@@ -445,6 +481,7 @@ function MenuDetailPage() {
                   <span>
                     Opsional
                   </span>
+
                 </div>
 
                 <div className="addon-list">
@@ -512,14 +549,16 @@ function MenuDetailPage() {
 
             {/* =========================
                 JUMLAH
-            ========================== */}
+                ========================== */}
 
             <section className="detail-section">
 
               <div className="detail-section-title">
+
                 <h2>
                   Jumlah
                 </h2>
+
               </div>
 
               <div className="quantity-control">
@@ -559,11 +598,12 @@ function MenuDetailPage() {
 
             {/* =========================
                 TOTAL
-            ========================== */}
+                ========================== */}
 
             <div className="detail-total">
 
               <div>
+
                 <span>
                   Total
                 </span>
@@ -574,6 +614,7 @@ function MenuDetailPage() {
                     ? "s"
                     : ""}
                 </small>
+
               </div>
 
               <strong>
@@ -587,7 +628,7 @@ function MenuDetailPage() {
 
             {/* =========================
                 BUTTON CART
-            ========================== */}
+                ========================== */}
 
             <button
               type="button"

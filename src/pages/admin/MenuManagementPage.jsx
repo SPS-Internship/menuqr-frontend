@@ -8,17 +8,48 @@ import {
   deleteMenu,
 } from "../../services/menuService";
 
-import { getCategories } from "../../services/categoryService";
-import { getRestaurants } from "../../services/restaurantService";
+import { getAdminCategories } from "../../services/categoryService";
+import { useAdminProfile } from "../../context/AdminProfileContext";
 
 function MenuManagementPage() {
+  // =========================================================
+  // ADMIN PROFILE / RESTAURANT AKTIF
+  // =========================================================
+
+  const { profile } = useAdminProfile();
+
+  const activeRestaurant =
+    profile?.restaurant || null;
+
+  const activeRestaurantId =
+    activeRestaurant?.id ||
+    (() => {
+      const savedAdminUser =
+        localStorage.getItem("adminUser");
+
+      if (savedAdminUser) {
+        try {
+          const parsedAdminUser =
+            JSON.parse(savedAdminUser);
+
+          return parsedAdminUser?.restaurant_id || null;
+        } catch (error) {
+          console.error(
+            "Gagal membaca adminUser:",
+            error
+          );
+        }
+      }
+
+      return null;
+    })();
+
   // =========================================================
   // DATA
   // =========================================================
 
   const [menus, setMenus] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [restaurants, setRestaurants] = useState([]);
 
   // =========================================================
   // FILTER
@@ -39,7 +70,9 @@ function MenuManagementPage() {
   // TAMBAH MENU
   // =========================================================
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] =
+    useState(false);
+
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -59,8 +92,11 @@ function MenuManagementPage() {
   // EDIT MENU
   // =========================================================
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingMenu, setEditingMenu] = useState(null);
+  const [showEditModal, setShowEditModal] =
+    useState(false);
+
+  const [editingMenu, setEditingMenu] =
+    useState(null);
 
   const [editFormData, setEditFormData] = useState({
     restaurant_id: "",
@@ -87,30 +123,26 @@ function MenuManagementPage() {
       setLoading(true);
       setError("");
 
-      const [menuResponse, categoryResponse, restaurantResponse] =
-        await Promise.all([
-          getAdminMenus(),
-          getCategories(),
-          getRestaurants(),
-        ]);
+      const [
+        menuResponse,
+        categoryResponse,
+      ] = await Promise.all([
+        getAdminMenus(),
+        getAdminCategories(),
+      ]);
 
-      setMenus(
+      const menuData =
         Array.isArray(menuResponse)
           ? menuResponse
-          : menuResponse?.data || []
-      );
+          : menuResponse?.data || [];
 
-      setCategories(
+      const categoryData =
         Array.isArray(categoryResponse)
           ? categoryResponse
-          : categoryResponse?.data || []
-      );
+          : categoryResponse?.data || [];
 
-      setRestaurants(
-        Array.isArray(restaurantResponse)
-          ? restaurantResponse
-          : restaurantResponse?.data || []
-      );
+      setMenus(menuData);
+      setCategories(categoryData);
     } catch (err) {
       console.error(err);
 
@@ -124,6 +156,44 @@ function MenuManagementPage() {
   };
 
   // =========================================================
+  // DATA RESTAURANT AKTIF
+  // =========================================================
+
+  const restaurantMenus = useMemo(() => {
+    if (!activeRestaurantId) {
+      return menus;
+    }
+
+    return menus.filter((menu) => {
+      const menuRestaurantId =
+        menu.restaurant_id ||
+        menu.restaurant?.id;
+
+      return (
+        String(menuRestaurantId) ===
+        String(activeRestaurantId)
+      );
+    });
+  }, [menus, activeRestaurantId]);
+
+  const restaurantCategories = useMemo(() => {
+    if (!activeRestaurantId) {
+      return categories;
+    }
+
+    return categories.filter((category) => {
+      const categoryRestaurantId =
+        category.restaurant_id ||
+        category.restaurant?.id;
+
+      return (
+        String(categoryRestaurantId) ===
+        String(activeRestaurantId)
+      );
+    });
+  }, [categories, activeRestaurantId]);
+
+  // =========================================================
   // HELPER
   // =========================================================
 
@@ -132,9 +202,12 @@ function MenuManagementPage() {
       return menu.category.name;
     }
 
-    const category = categories.find(
-      (item) => item.id === menu.category_id
-    );
+    const category =
+      restaurantCategories.find(
+        (item) =>
+          String(item.id) ===
+          String(menu.category_id)
+      );
 
     return category?.name || "-";
   };
@@ -144,15 +217,21 @@ function MenuManagementPage() {
       return menu.restaurant.name;
     }
 
-    const restaurant = restaurants.find(
-      (item) => item.id === menu.restaurant_id
-    );
+    if (
+      activeRestaurant &&
+      String(menu.restaurant_id) ===
+        String(activeRestaurant.id)
+    ) {
+      return activeRestaurant.name;
+    }
 
-    return restaurant?.name || "-";
+    return "-";
   };
 
   const formatPrice = (price) => {
-    return new Intl.NumberFormat("id-ID").format(price || 0);
+    return new Intl.NumberFormat("id-ID").format(
+      price || 0
+    );
   };
 
   const createSlug = (text) => {
@@ -169,65 +248,93 @@ function MenuManagementPage() {
   // =========================================================
 
   const filteredMenus = useMemo(() => {
-    return menus.filter((menu) => {
-      const keyword = search.toLowerCase().trim();
+    return restaurantMenus.filter((menu) => {
+      const keyword =
+        search.toLowerCase().trim();
 
       const matchesSearch =
         !keyword ||
-        menu.name?.toLowerCase().includes(keyword) ||
-        menu.description?.toLowerCase().includes(keyword) ||
-        menu.slug?.toLowerCase().includes(keyword);
+        menu.name
+          ?.toLowerCase()
+          .includes(keyword) ||
+        menu.description
+          ?.toLowerCase()
+          .includes(keyword) ||
+        menu.slug
+          ?.toLowerCase()
+          .includes(keyword);
 
       const matchesCategory =
         !categoryFilter ||
-        String(menu.category_id) === String(categoryFilter);
+        String(menu.category_id) ===
+          String(categoryFilter);
 
       const matchesStatus =
         !statusFilter ||
-        (statusFilter === "available" && menu.is_available) ||
-        (statusFilter === "unavailable" && !menu.is_available);
+        (statusFilter === "available" &&
+          menu.is_available) ||
+        (statusFilter === "unavailable" &&
+          !menu.is_available);
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesStatus
+      );
     });
-  }, [menus, search, categoryFilter, statusFilter]);
+  }, [
+    restaurantMenus,
+    search,
+    categoryFilter,
+    statusFilter,
+  ]);
 
   // =========================================================
   // STATISTICS
   // =========================================================
 
-  const totalMenus = menus.length;
+  const totalMenus =
+    restaurantMenus.length;
 
-  const availableMenus = menus.filter(
-    (menu) => menu.is_available
-  ).length;
+  const availableMenus =
+    restaurantMenus.filter(
+      (menu) => menu.is_available
+    ).length;
 
-  const unavailableMenus = menus.filter(
-    (menu) => !menu.is_available
-  ).length;
+  const unavailableMenus =
+    restaurantMenus.filter(
+      (menu) => !menu.is_available
+    ).length;
 
-  const totalCategories = categories.length;
+  const totalCategories =
+    restaurantCategories.length;
 
   // =========================================================
   // CATEGORY COMPOSITION
   // =========================================================
 
-  const categoryComposition = useMemo(() => {
-    const result = {};
+  const categoryComposition =
+    useMemo(() => {
+      const result = {};
 
-    menus.forEach((menu) => {
-      const categoryName = getCategoryName(menu);
+      restaurantMenus.forEach((menu) => {
+        const categoryName =
+          getCategoryName(menu);
 
-      if (!result[categoryName]) {
-        result[categoryName] = 0;
-      }
+        if (!result[categoryName]) {
+          result[categoryName] = 0;
+        }
 
-      result[categoryName]++;
-    });
+        result[categoryName]++;
+      });
 
-    return Object.entries(result)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  }, [menus, categories]);
+      return Object.entries(result)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+    }, [
+      restaurantMenus,
+      restaurantCategories,
+    ]);
 
   // =========================================================
   // TAMBAH MENU
@@ -238,9 +345,7 @@ function MenuManagementPage() {
 
     setFormData({
       restaurant_id:
-        restaurants.length === 1
-          ? restaurants[0].id
-          : "",
+        activeRestaurantId || "",
       category_id: "",
       name: "",
       slug: "",
@@ -311,23 +416,34 @@ function MenuManagementPage() {
 
     setFormError("");
 
-    if (!formData.restaurant_id) {
-      setFormError("Silakan pilih restaurant.");
+    if (!activeRestaurantId) {
+      setFormError(
+        "Restaurant aktif tidak ditemukan. Silakan login kembali."
+      );
       return;
     }
 
     if (!formData.category_id) {
-      setFormError("Silakan pilih kategori menu.");
+      setFormError(
+        "Silakan pilih kategori menu."
+      );
       return;
     }
 
     if (!formData.name.trim()) {
-      setFormError("Nama menu wajib diisi.");
+      setFormError(
+        "Nama menu wajib diisi."
+      );
       return;
     }
 
-    if (!formData.price || Number(formData.price) < 0) {
-      setFormError("Harga menu wajib diisi dengan benar.");
+    if (
+      !formData.price ||
+      Number(formData.price) < 0
+    ) {
+      setFormError(
+        "Harga menu wajib diisi dengan benar."
+      );
       return;
     }
 
@@ -338,7 +454,7 @@ function MenuManagementPage() {
 
       data.append(
         "restaurant_id",
-        formData.restaurant_id
+        activeRestaurantId
       );
 
       data.append(
@@ -353,7 +469,8 @@ function MenuManagementPage() {
 
       data.append(
         "slug",
-        formData.slug || createSlug(formData.name)
+        formData.slug ||
+          createSlug(formData.name)
       );
 
       data.append(
@@ -368,7 +485,9 @@ function MenuManagementPage() {
 
       data.append(
         "is_available",
-        formData.is_available ? "1" : "0"
+        formData.is_available
+          ? "1"
+          : "0"
       );
 
       data.append(
@@ -377,7 +496,10 @@ function MenuManagementPage() {
       );
 
       if (formData.image) {
-        data.append("image", formData.image);
+        data.append(
+          "image",
+          formData.image
+        );
       }
 
       await createMenu(data);
@@ -385,7 +507,8 @@ function MenuManagementPage() {
       setShowCreateModal(false);
 
       setFormData({
-        restaurant_id: "",
+        restaurant_id:
+          activeRestaurantId || "",
         category_id: "",
         name: "",
         slug: "",
@@ -398,7 +521,9 @@ function MenuManagementPage() {
 
       await loadData();
 
-      alert("Menu berhasil ditambahkan!");
+      alert(
+        "Menu berhasil ditambahkan!"
+      );
     } catch (err) {
       console.error(err);
 
@@ -406,14 +531,16 @@ function MenuManagementPage() {
         err.response?.data?.errors;
 
       if (backendErrors) {
-        const firstError = Object.values(
-          backendErrors
-        )
-          .flat()
-          .find(Boolean);
+        const firstError =
+          Object.values(
+            backendErrors
+          )
+            .flat()
+            .find(Boolean);
 
         setFormError(
-          firstError || "Gagal menambahkan menu."
+          firstError ||
+            "Gagal menambahkan menu."
         );
       } else {
         setFormError(
@@ -436,6 +563,7 @@ function MenuManagementPage() {
 
     setEditFormData({
       restaurant_id:
+        activeRestaurantId ||
         menu.restaurant_id ||
         menu.restaurant?.id ||
         "",
@@ -445,11 +573,14 @@ function MenuManagementPage() {
         "",
       name: menu.name || "",
       slug: menu.slug || "",
-      description: menu.description || "",
+      description:
+        menu.description || "",
       price: menu.price || "",
       image: null,
-      is_available: Boolean(menu.is_available),
-      sort_order: menu.sort_order || 0,
+      is_available:
+        Boolean(menu.is_available),
+      sort_order:
+        menu.sort_order || 0,
     });
 
     setShowEditModal(true);
@@ -465,7 +596,8 @@ function MenuManagementPage() {
     setFormError("");
 
     setEditFormData({
-      restaurant_id: "",
+      restaurant_id:
+        activeRestaurantId || "",
       category_id: "",
       name: "",
       slug: "",
@@ -477,7 +609,9 @@ function MenuManagementPage() {
     });
   };
 
-  const handleEditFormChange = (event) => {
+  const handleEditFormChange = (
+    event
+  ) => {
     const {
       name,
       value,
@@ -520,7 +654,9 @@ function MenuManagementPage() {
     }));
   };
 
-  const handleUpdateMenu = async (event) => {
+  const handleUpdateMenu = async (
+    event
+  ) => {
     event.preventDefault();
 
     setFormError("");
@@ -529,18 +665,24 @@ function MenuManagementPage() {
       return;
     }
 
-    if (!editFormData.restaurant_id) {
-      setFormError("Silakan pilih restaurant.");
+    if (!activeRestaurantId) {
+      setFormError(
+        "Restaurant aktif tidak ditemukan. Silakan login kembali."
+      );
       return;
     }
 
     if (!editFormData.category_id) {
-      setFormError("Silakan pilih kategori menu.");
+      setFormError(
+        "Silakan pilih kategori menu."
+      );
       return;
     }
 
     if (!editFormData.name.trim()) {
-      setFormError("Nama menu wajib diisi.");
+      setFormError(
+        "Nama menu wajib diisi."
+      );
       return;
     }
 
@@ -548,7 +690,9 @@ function MenuManagementPage() {
       editFormData.price === "" ||
       Number(editFormData.price) < 0
     ) {
-      setFormError("Harga menu wajib diisi dengan benar.");
+      setFormError(
+        "Harga menu wajib diisi dengan benar."
+      );
       return;
     }
 
@@ -559,7 +703,7 @@ function MenuManagementPage() {
 
       data.append(
         "restaurant_id",
-        editFormData.restaurant_id
+        activeRestaurantId
       );
 
       data.append(
@@ -575,7 +719,9 @@ function MenuManagementPage() {
       data.append(
         "slug",
         editFormData.slug ||
-          createSlug(editFormData.name)
+          createSlug(
+            editFormData.name
+          )
       );
 
       data.append(
@@ -590,27 +736,39 @@ function MenuManagementPage() {
 
       data.append(
         "is_available",
-        editFormData.is_available ? "1" : "0"
+        editFormData.is_available
+          ? "1"
+          : "0"
       );
 
       data.append(
         "sort_order",
-        Number(editFormData.sort_order) || 0
+        Number(
+          editFormData.sort_order
+        ) || 0
       );
 
       // Foto hanya dikirim jika user memilih foto baru
       if (editFormData.image) {
-        data.append("image", editFormData.image);
+        data.append(
+          "image",
+          editFormData.image
+        );
       }
 
-      await updateMenu(editingMenu.id, data);
+      await updateMenu(
+        editingMenu.id,
+        data
+      );
 
       setShowEditModal(false);
       setEditingMenu(null);
 
       await loadData();
 
-      alert("Menu berhasil diperbarui!");
+      alert(
+        "Menu berhasil diperbarui!"
+      );
     } catch (err) {
       console.error(err);
 
@@ -618,14 +776,16 @@ function MenuManagementPage() {
         err.response?.data?.errors;
 
       if (backendErrors) {
-        const firstError = Object.values(
-          backendErrors
-        )
-          .flat()
-          .find(Boolean);
+        const firstError =
+          Object.values(
+            backendErrors
+          )
+            .flat()
+            .find(Boolean);
 
         setFormError(
-          firstError || "Gagal memperbarui menu."
+          firstError ||
+            "Gagal memperbarui menu."
         );
       } else {
         setFormError(
@@ -642,10 +802,13 @@ function MenuManagementPage() {
   // HAPUS MENU
   // =========================================================
 
-  const handleDelete = async (menu) => {
-    const confirmed = window.confirm(
-      `Apakah kamu yakin ingin menghapus menu "${menu.name}"?`
-    );
+  const handleDelete = async (
+    menu
+  ) => {
+    const confirmed =
+      window.confirm(
+        `Apakah kamu yakin ingin menghapus menu "${menu.name}"?`
+      );
 
     if (!confirmed) {
       return;
@@ -654,13 +817,17 @@ function MenuManagementPage() {
     try {
       await deleteMenu(menu.id);
 
-      setMenus((currentMenus) =>
-        currentMenus.filter(
-          (item) => item.id !== menu.id
-        )
+      setMenus(
+        (currentMenus) =>
+          currentMenus.filter(
+            (item) =>
+              item.id !== menu.id
+          )
       );
 
-      alert("Menu berhasil dihapus!");
+      alert(
+        "Menu berhasil dihapus!"
+      );
     } catch (err) {
       console.error(err);
 
@@ -718,7 +885,9 @@ function MenuManagementPage() {
           <button
             type="button"
             className="menu-add-button"
-            onClick={handleOpenCreateModal}
+            onClick={
+              handleOpenCreateModal
+            }
           >
             <span>+</span>
             Tambah Menu
@@ -729,8 +898,26 @@ function MenuManagementPage() {
 
         {error && (
           <div className="menu-error">
-            <strong>Terjadi kesalahan</strong>
+            <strong>
+              Terjadi kesalahan
+            </strong>
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* ================= RESTAURANT AKTIF ================= */}
+
+        {activeRestaurant && (
+          <div
+            className="menu-active-restaurant"
+            style={{
+              marginBottom: "20px",
+            }}
+          >
+            <strong>
+              Restaurant aktif:
+            </strong>{" "}
+            {activeRestaurant.name}
           </div>
         )}
 
@@ -745,8 +932,12 @@ function MenuManagementPage() {
 
             <div className="menu-stat-content">
               <span>Total Menu</span>
-              <strong>{totalMenus}</strong>
-              <small>Semua menu</small>
+              <strong>
+                {totalMenus}
+              </strong>
+              <small>
+                Semua menu
+              </small>
             </div>
           </div>
 
@@ -757,8 +948,12 @@ function MenuManagementPage() {
 
             <div className="menu-stat-content">
               <span>Tersedia</span>
-              <strong>{availableMenus}</strong>
-              <small>Menu aktif</small>
+              <strong>
+                {availableMenus}
+              </strong>
+              <small>
+                Menu aktif
+              </small>
             </div>
           </div>
 
@@ -769,8 +964,12 @@ function MenuManagementPage() {
 
             <div className="menu-stat-content">
               <span>Habis</span>
-              <strong>{unavailableMenus}</strong>
-              <small>Tidak tersedia</small>
+              <strong>
+                {unavailableMenus}
+              </strong>
+              <small>
+                Tidak tersedia
+              </small>
             </div>
           </div>
 
@@ -781,8 +980,12 @@ function MenuManagementPage() {
 
             <div className="menu-stat-content">
               <span>Kategori</span>
-              <strong>{totalCategories}</strong>
-              <small>Kategori menu</small>
+              <strong>
+                {totalCategories}
+              </strong>
+              <small>
+                Kategori menu
+              </small>
             </div>
           </div>
 
@@ -802,7 +1005,9 @@ function MenuManagementPage() {
               placeholder="Cari nama atau deskripsi menu..."
               value={search}
               onChange={(event) =>
-                setSearch(event.target.value)
+                setSearch(
+                  event.target.value
+                )
               }
             />
           </div>
@@ -810,27 +1015,33 @@ function MenuManagementPage() {
           <select
             value={categoryFilter}
             onChange={(event) =>
-              setCategoryFilter(event.target.value)
+              setCategoryFilter(
+                event.target.value
+              )
             }
           >
             <option value="">
               Semua Kategori
             </option>
 
-            {categories.map((category) => (
-              <option
-                key={category.id}
-                value={category.id}
-              >
-                {category.name}
-              </option>
-            ))}
+            {restaurantCategories.map(
+              (category) => (
+                <option
+                  key={category.id}
+                  value={category.id}
+                >
+                  {category.name}
+                </option>
+              )
+            )}
           </select>
 
           <select
             value={statusFilter}
             onChange={(event) =>
-              setStatusFilter(event.target.value)
+              setStatusFilter(
+                event.target.value
+              )
             }
           >
             <option value="">
@@ -884,119 +1095,141 @@ function MenuManagementPage() {
 
                 {filteredMenus.length > 0 ? (
 
-                  filteredMenus.map((menu) => (
+                  filteredMenus.map(
+                    (menu) => (
 
-                    <tr key={menu.id}>
+                      <tr key={menu.id}>
 
-                      {/* MENU */}
+                        {/* MENU */}
 
-                      <td>
-                        <div className="menu-info">
+                        <td>
+                          <div className="menu-info">
 
-                          {menu.image_url ? (
-                            <img
-                              src={menu.image_url}
-                              alt={menu.name}
-                              className="menu-image"
-                            />
-                          ) : (
-                            <div className="menu-image-placeholder">
-                              🍜
+                            {menu.image_url ? (
+                              <img
+                                src={
+                                  menu.image_url
+                                }
+                                alt={
+                                  menu.name
+                                }
+                                className="menu-image"
+                              />
+                            ) : (
+                              <div className="menu-image-placeholder">
+                                🍜
+                              </div>
+                            )}
+
+                            <div className="menu-info-text">
+
+                              <strong>
+                                {menu.name}
+                              </strong>
+
+                              <span>
+                                {menu.slug ||
+                                  "-"}
+                              </span>
+
                             </div>
-                          )}
-
-                          <div className="menu-info-text">
-
-                            <strong>
-                              {menu.name}
-                            </strong>
-
-                            <span>
-                              {menu.slug || "-"}
-                            </span>
 
                           </div>
+                        </td>
 
-                        </div>
-                      </td>
+                        {/* KATEGORI */}
 
-                      {/* KATEGORI */}
-
-                      <td>
-                        <span className="category-badge">
-                          {getCategoryName(menu)}
-                        </span>
-                      </td>
-
-                      {/* HARGA */}
-
-                      <td>
-                        <strong className="menu-price">
-                          Rp {formatPrice(menu.price)}
-                        </strong>
-                      </td>
-
-                      {/* STATUS */}
-
-                      <td>
-                        {menu.is_available ? (
-
-                          <span className="status-badge status-available">
-                            <span className="status-dot"></span>
-                            Tersedia
+                        <td>
+                          <span className="category-badge">
+                            {getCategoryName(
+                              menu
+                            )}
                           </span>
+                        </td>
 
-                        ) : (
+                        {/* HARGA */}
 
-                          <span className="status-badge status-unavailable">
-                            <span className="status-dot"></span>
-                            Habis
+                        <td>
+                          <strong className="menu-price">
+                            Rp{" "}
+                            {formatPrice(
+                              menu.price
+                            )}
+                          </strong>
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td>
+                          {menu.is_available ? (
+
+                            <span className="status-badge status-available">
+                              <span className="status-dot"></span>
+                              Tersedia
+                            </span>
+
+                          ) : (
+
+                            <span className="status-badge status-unavailable">
+                              <span className="status-dot"></span>
+                              Habis
+                            </span>
+
+                          )}
+                        </td>
+
+                        {/* RESTAURANT */}
+
+                        <td>
+                          <span className="restaurant-name">
+                            {getRestaurantName(
+                              menu
+                            )}
                           </span>
+                        </td>
 
-                        )}
-                      </td>
+                        {/* ACTION */}
 
-                      {/* RESTAURANT */}
+                        <td>
+                          <div className="menu-actions">
 
-                      <td>
-                        <span className="restaurant-name">
-                          {getRestaurantName(menu)}
-                        </span>
-                      </td>
+                            <button
+                              type="button"
+                              className="menu-edit-button"
+                              onClick={() =>
+                                handleOpenEditModal(
+                                  menu
+                                )
+                              }
+                            >
+                              <span>
+                                ✎
+                              </span>
+                              Edit
+                            </button>
 
-                      {/* ACTION */}
+                            <button
+                              type="button"
+                              className="menu-delete-button"
+                              onClick={() =>
+                                handleDelete(
+                                  menu
+                                )
+                              }
+                            >
+                              <span>
+                                ♜
+                              </span>
+                              Hapus
+                            </button>
 
-                      <td>
-                        <div className="menu-actions">
+                          </div>
+                        </td>
 
-                          <button
-                            type="button"
-                            className="menu-edit-button"
-                            onClick={() =>
-                              handleOpenEditModal(menu)
-                            }
-                          >
-                            <span>✎</span>
-                            Edit
-                          </button>
+                      </tr>
 
-                          <button
-                            type="button"
-                            className="menu-delete-button"
-                            onClick={() =>
-                              handleDelete(menu)
-                            }
-                          >
-                            <span>♜</span>
-                            Hapus
-                          </button>
-
-                        </div>
-                      </td>
-
-                    </tr>
-
-                  ))
+                    )
+                  )
 
                 ) : (
 
@@ -1042,8 +1275,13 @@ function MenuManagementPage() {
 
             <div className="menu-bottom-header">
               <div>
-                <span>KATEGORI</span>
-                <h3>Komposisi Menu</h3>
+                <span>
+                  KATEGORI
+                </span>
+
+                <h3>
+                  Komposisi Menu
+                </h3>
               </div>
             </div>
 
@@ -1052,20 +1290,30 @@ function MenuManagementPage() {
               <div className="category-composition">
 
                 {categoryComposition.map(
-                  ([categoryName, total]) => {
+                  (
+                    [
+                      categoryName,
+                      total,
+                    ]
+                  ) => {
 
                     const percentage =
                       totalMenus > 0
-                        ? (total / totalMenus) * 100
+                        ? (total /
+                            totalMenus) *
+                          100
                         : 0;
 
                     return (
                       <div
                         className="composition-item"
-                        key={categoryName}
+                        key={
+                          categoryName
+                        }
                       >
 
                         <div className="composition-top">
+
                           <span>
                             {categoryName}
                           </span>
@@ -1073,6 +1321,7 @@ function MenuManagementPage() {
                           <strong>
                             {total}
                           </strong>
+
                         </div>
 
                         <div className="composition-bar">
@@ -1109,36 +1358,53 @@ function MenuManagementPage() {
 
             <div className="menu-bottom-header">
               <div>
-                <span>OVERVIEW</span>
-                <h3>Ringkasan Menu</h3>
+                <span>
+                  OVERVIEW
+                </span>
+
+                <h3>
+                  Ringkasan Menu
+                </h3>
               </div>
             </div>
 
             <div className="menu-overview">
 
               <div className="overview-row">
-                <span>Total menu</span>
+                <span>
+                  Total menu
+                </span>
+
                 <strong>
                   {totalMenus}
                 </strong>
               </div>
 
               <div className="overview-row">
-                <span>Menu tersedia</span>
+                <span>
+                  Menu tersedia
+                </span>
+
                 <strong>
                   {availableMenus}
                 </strong>
               </div>
 
               <div className="overview-row">
-                <span>Menu habis</span>
+                <span>
+                  Menu habis
+                </span>
+
                 <strong>
                   {unavailableMenus}
                 </strong>
               </div>
 
               <div className="overview-row">
-                <span>Kategori</span>
+                <span>
+                  Kategori
+                </span>
+
                 <strong>
                   {totalCategories}
                 </strong>
@@ -1159,7 +1425,10 @@ function MenuManagementPage() {
           <div
             className="menu-modal-overlay"
             onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
+              if (
+                event.target ===
+                event.currentTarget
+              ) {
                 handleCloseCreateModal();
               }
             }}
@@ -1186,7 +1455,9 @@ function MenuManagementPage() {
                 <button
                   type="button"
                   className="menu-modal-close"
-                  onClick={handleCloseCreateModal}
+                  onClick={
+                    handleCloseCreateModal
+                  }
                   disabled={saving}
                 >
                   ×
@@ -1202,7 +1473,9 @@ function MenuManagementPage() {
 
               <form
                 className="menu-create-form"
-                onSubmit={handleCreateMenu}
+                onSubmit={
+                  handleCreateMenu
+                }
               >
 
                 {/* RESTAURANT */}
@@ -1217,26 +1490,18 @@ function MenuManagementPage() {
                   <select
                     id="restaurant_id"
                     name="restaurant_id"
-                    value={formData.restaurant_id}
-                    onChange={handleFormChange}
-                    disabled={saving}
+                    value={
+                      formData.restaurant_id
+                    }
+                    disabled
                     required
                   >
 
                     <option value="">
-                      Pilih restaurant
+                      {activeRestaurant
+                        ? activeRestaurant.name
+                        : "Restaurant belum ditemukan"}
                     </option>
-
-                    {restaurants.map((restaurant) => (
-
-                      <option
-                        key={restaurant.id}
-                        value={restaurant.id}
-                      >
-                        {restaurant.name}
-                      </option>
-
-                    ))}
 
                   </select>
 
@@ -1254,8 +1519,12 @@ function MenuManagementPage() {
                   <select
                     id="category_id"
                     name="category_id"
-                    value={formData.category_id}
-                    onChange={handleFormChange}
+                    value={
+                      formData.category_id
+                    }
+                    onChange={
+                      handleFormChange
+                    }
                     disabled={saving}
                     required
                   >
@@ -1264,27 +1533,22 @@ function MenuManagementPage() {
                       Pilih kategori
                     </option>
 
-                    {categories
-                      .filter((category) => {
-                        if (!formData.restaurant_id) {
-                          return true;
-                        }
-
-                        return (
-                          String(category.restaurant_id) ===
-                          String(formData.restaurant_id)
-                        );
-                      })
-                      .map((category) => (
+                    {restaurantCategories.map(
+                      (category) => (
 
                         <option
-                          key={category.id}
-                          value={category.id}
+                          key={
+                            category.id
+                          }
+                          value={
+                            category.id
+                          }
                         >
                           {category.name}
                         </option>
 
-                      ))}
+                      )
+                    )}
 
                   </select>
 
@@ -1303,8 +1567,12 @@ function MenuManagementPage() {
                     id="name"
                     type="text"
                     name="name"
-                    value={formData.name}
-                    onChange={handleFormChange}
+                    value={
+                      formData.name
+                    }
+                    onChange={
+                      handleFormChange
+                    }
                     placeholder="Contoh: Nasi Goreng Spesial"
                     disabled={saving}
                     required
@@ -1324,8 +1592,12 @@ function MenuManagementPage() {
                     id="slug"
                     type="text"
                     name="slug"
-                    value={formData.slug}
-                    onChange={handleFormChange}
+                    value={
+                      formData.slug
+                    }
+                    onChange={
+                      handleFormChange
+                    }
                     placeholder="nasi-goreng-spesial"
                     disabled={saving}
                   />
@@ -1347,8 +1619,12 @@ function MenuManagementPage() {
                   <textarea
                     id="description"
                     name="description"
-                    value={formData.description}
-                    onChange={handleFormChange}
+                    value={
+                      formData.description
+                    }
+                    onChange={
+                      handleFormChange
+                    }
                     placeholder="Masukkan deskripsi menu..."
                     rows="4"
                     disabled={saving}
@@ -1377,8 +1653,12 @@ function MenuManagementPage() {
                         id="price"
                         type="number"
                         name="price"
-                        value={formData.price}
-                        onChange={handleFormChange}
+                        value={
+                          formData.price
+                        }
+                        onChange={
+                          handleFormChange
+                        }
                         placeholder="15000"
                         min="0"
                         disabled={saving}
@@ -1399,8 +1679,12 @@ function MenuManagementPage() {
                       id="sort_order"
                       type="number"
                       name="sort_order"
-                      value={formData.sort_order}
-                      onChange={handleFormChange}
+                      value={
+                        formData.sort_order
+                      }
+                      onChange={
+                        handleFormChange
+                      }
                       min="0"
                       disabled={saving}
                     />
@@ -1422,7 +1706,9 @@ function MenuManagementPage() {
                     type="file"
                     name="image"
                     accept="image/*"
-                    onChange={handleFormChange}
+                    onChange={
+                      handleFormChange
+                    }
                     disabled={saving}
                   />
 
@@ -1435,7 +1721,10 @@ function MenuManagementPage() {
                     <div className="menu-selected-file">
                       File dipilih:{" "}
                       <strong>
-                        {formData.image.name}
+                        {
+                          formData.image
+                            .name
+                        }
                       </strong>
                     </div>
 
@@ -1452,8 +1741,12 @@ function MenuManagementPage() {
                     <input
                       type="checkbox"
                       name="is_available"
-                      checked={formData.is_available}
-                      onChange={handleFormChange}
+                      checked={
+                        formData.is_available
+                      }
+                      onChange={
+                        handleFormChange
+                      }
                       disabled={saving}
                     />
 
@@ -1472,7 +1765,9 @@ function MenuManagementPage() {
                   <button
                     type="button"
                     className="menu-modal-cancel"
-                    onClick={handleCloseCreateModal}
+                    onClick={
+                      handleCloseCreateModal
+                    }
                     disabled={saving}
                   >
                     Batal
@@ -1481,7 +1776,10 @@ function MenuManagementPage() {
                   <button
                     type="submit"
                     className="menu-modal-submit"
-                    disabled={saving}
+                    disabled={
+                      saving ||
+                      !activeRestaurantId
+                    }
                   >
 
                     {saving ? (
@@ -1491,7 +1789,9 @@ function MenuManagementPage() {
                       </>
                     ) : (
                       <>
-                        <span>+</span>
+                        <span>
+                          +
+                        </span>
                         Simpan Menu
                       </>
                     )}
@@ -1517,7 +1817,10 @@ function MenuManagementPage() {
           <div
             className="menu-modal-overlay"
             onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
+              if (
+                event.target ===
+                event.currentTarget
+              ) {
                 handleCloseEditModal();
               }
             }}
@@ -1546,7 +1849,9 @@ function MenuManagementPage() {
                 <button
                   type="button"
                   className="menu-modal-close"
-                  onClick={handleCloseEditModal}
+                  onClick={
+                    handleCloseEditModal
+                  }
                   disabled={saving}
                 >
                   ×
@@ -1568,7 +1873,9 @@ function MenuManagementPage() {
 
               <form
                 className="menu-create-form"
-                onSubmit={handleUpdateMenu}
+                onSubmit={
+                  handleUpdateMenu
+                }
               >
 
                 {/* RESTAURANT */}
@@ -1583,26 +1890,18 @@ function MenuManagementPage() {
                   <select
                     id="edit_restaurant_id"
                     name="restaurant_id"
-                    value={editFormData.restaurant_id}
-                    onChange={handleEditFormChange}
-                    disabled={saving}
+                    value={
+                      editFormData.restaurant_id
+                    }
+                    disabled
                     required
                   >
 
                     <option value="">
-                      Pilih restaurant
+                      {activeRestaurant
+                        ? activeRestaurant.name
+                        : "Restaurant belum ditemukan"}
                     </option>
-
-                    {restaurants.map((restaurant) => (
-
-                      <option
-                        key={restaurant.id}
-                        value={restaurant.id}
-                      >
-                        {restaurant.name}
-                      </option>
-
-                    ))}
 
                   </select>
 
@@ -1620,8 +1919,12 @@ function MenuManagementPage() {
                   <select
                     id="edit_category_id"
                     name="category_id"
-                    value={editFormData.category_id}
-                    onChange={handleEditFormChange}
+                    value={
+                      editFormData.category_id
+                    }
+                    onChange={
+                      handleEditFormChange
+                    }
                     disabled={saving}
                     required
                   >
@@ -1630,27 +1933,22 @@ function MenuManagementPage() {
                       Pilih kategori
                     </option>
 
-                    {categories
-                      .filter((category) => {
-                        if (!editFormData.restaurant_id) {
-                          return true;
-                        }
-
-                        return (
-                          String(category.restaurant_id) ===
-                          String(editFormData.restaurant_id)
-                        );
-                      })
-                      .map((category) => (
+                    {restaurantCategories.map(
+                      (category) => (
 
                         <option
-                          key={category.id}
-                          value={category.id}
+                          key={
+                            category.id
+                          }
+                          value={
+                            category.id
+                          }
                         >
                           {category.name}
                         </option>
 
-                      ))}
+                      )
+                    )}
 
                   </select>
 
@@ -1669,8 +1967,12 @@ function MenuManagementPage() {
                     id="edit_name"
                     type="text"
                     name="name"
-                    value={editFormData.name}
-                    onChange={handleEditFormChange}
+                    value={
+                      editFormData.name
+                    }
+                    onChange={
+                      handleEditFormChange
+                    }
                     placeholder="Contoh: Nasi Goreng Spesial"
                     disabled={saving}
                     required
@@ -1690,8 +1992,12 @@ function MenuManagementPage() {
                     id="edit_slug"
                     type="text"
                     name="slug"
-                    value={editFormData.slug}
-                    onChange={handleEditFormChange}
+                    value={
+                      editFormData.slug
+                    }
+                    onChange={
+                      handleEditFormChange
+                    }
                     placeholder="nasi-goreng-spesial"
                     disabled={saving}
                   />
@@ -1713,8 +2019,12 @@ function MenuManagementPage() {
                   <textarea
                     id="edit_description"
                     name="description"
-                    value={editFormData.description}
-                    onChange={handleEditFormChange}
+                    value={
+                      editFormData.description
+                    }
+                    onChange={
+                      handleEditFormChange
+                    }
                     placeholder="Masukkan deskripsi menu..."
                     rows="4"
                     disabled={saving}
@@ -1743,8 +2053,12 @@ function MenuManagementPage() {
                         id="edit_price"
                         type="number"
                         name="price"
-                        value={editFormData.price}
-                        onChange={handleEditFormChange}
+                        value={
+                          editFormData.price
+                        }
+                        onChange={
+                          handleEditFormChange
+                        }
                         placeholder="15000"
                         min="0"
                         disabled={saving}
@@ -1765,8 +2079,12 @@ function MenuManagementPage() {
                       id="edit_sort_order"
                       type="number"
                       name="sort_order"
-                      value={editFormData.sort_order}
-                      onChange={handleEditFormChange}
+                      value={
+                        editFormData.sort_order
+                      }
+                      onChange={
+                        handleEditFormChange
+                      }
                       min="0"
                       disabled={saving}
                     />
@@ -1787,8 +2105,12 @@ function MenuManagementPage() {
 
                     <div>
                       <img
-                        src={editingMenu.image_url}
-                        alt={editingMenu.name}
+                        src={
+                          editingMenu.image_url
+                        }
+                        alt={
+                          editingMenu.name
+                        }
                         className="menu-edit-preview"
                       />
                     </div>
@@ -1810,7 +2132,9 @@ function MenuManagementPage() {
                     type="file"
                     name="image"
                     accept="image/*"
-                    onChange={handleEditFormChange}
+                    onChange={
+                      handleEditFormChange
+                    }
                     disabled={saving}
                   />
 
@@ -1823,7 +2147,10 @@ function MenuManagementPage() {
                     <div className="menu-selected-file">
                       Foto baru:{" "}
                       <strong>
-                        {editFormData.image.name}
+                        {
+                          editFormData
+                            .image.name
+                        }
                       </strong>
                     </div>
 
@@ -1840,8 +2167,12 @@ function MenuManagementPage() {
                     <input
                       type="checkbox"
                       name="is_available"
-                      checked={editFormData.is_available}
-                      onChange={handleEditFormChange}
+                      checked={
+                        editFormData.is_available
+                      }
+                      onChange={
+                        handleEditFormChange
+                      }
                       disabled={saving}
                     />
 
@@ -1860,7 +2191,9 @@ function MenuManagementPage() {
                   <button
                     type="button"
                     className="menu-modal-cancel"
-                    onClick={handleCloseEditModal}
+                    onClick={
+                      handleCloseEditModal
+                    }
                     disabled={saving}
                   >
                     Batal
@@ -1869,7 +2202,10 @@ function MenuManagementPage() {
                   <button
                     type="submit"
                     className="menu-modal-submit"
-                    disabled={saving}
+                    disabled={
+                      saving ||
+                      !activeRestaurantId
+                    }
                   >
 
                     {saving ? (
@@ -1879,7 +2215,9 @@ function MenuManagementPage() {
                       </>
                     ) : (
                       <>
-                        <span>✓</span>
+                        <span>
+                          ✓
+                        </span>
                         Simpan Perubahan
                       </>
                     )}

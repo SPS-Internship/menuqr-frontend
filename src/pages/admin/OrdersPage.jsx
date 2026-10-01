@@ -844,6 +844,7 @@ function OrdersPage() {
               ) : (
                 <>
                   {/* HEADER MODAL */}
+
                   <div
                     style={{
                       display: "flex",
@@ -907,6 +908,7 @@ function OrdersPage() {
                   </div>
 
                   {/* INFO */}
+
                   <div
                     style={{
                       display: "grid",
@@ -955,6 +957,7 @@ function OrdersPage() {
                   </div>
 
                   {/* CATATAN */}
+
                   {selectedOrder.note && (
                     <div
                       style={{
@@ -995,6 +998,7 @@ function OrdersPage() {
                   )}
 
                   {/* ITEMS */}
+
                   <h5
                     style={{
                       fontWeight:
@@ -1127,6 +1131,7 @@ function OrdersPage() {
                   </div>
 
                   {/* TOTAL */}
+
                   <div
                     style={{
                       display:
@@ -1169,6 +1174,7 @@ function OrdersPage() {
                   </div>
 
                   {/* AKSI */}
+
                   <div
                     style={{
                       display:
@@ -1178,7 +1184,12 @@ function OrdersPage() {
                         "wrap",
                     }}
                   >
-                    {/* PESANAN BARU */}
+                    {/* ==========================================
+                        PESANAN BARU
+                        BISA PROSES KE DAPUR
+                        DAN BISA DIBATALKAN
+                    ========================================== */}
+
                     {String(
                       selectedOrder.status
                     ).toLowerCase() ===
@@ -1230,59 +1241,44 @@ function OrdersPage() {
                       </>
                     )}
 
-                    {/* PESANAN DIPROSES */}
+                    {/* ==========================================
+                        PESANAN DIPROSES
+                        HANYA BISA DITANDAI SELESAI
+                        TIDAK ADA BUTTON BATALKAN
+                    ========================================== */}
+
                     {String(
                       selectedOrder.status
                     ).toLowerCase() ===
                       "confirmed" && (
-                      <>
-                        <button
-                          disabled={
+                      <button
+                        disabled={
+                          updating
+                        }
+                        onClick={() =>
+                          handleUpdateStatus(
+                            selectedOrder,
+                            "completed"
+                          )
+                        }
+                        style={{
+                          ...successButtonStyle,
+                          opacity:
                             updating
-                          }
-                          onClick={() =>
-                            handleUpdateStatus(
-                              selectedOrder,
-                              "completed"
-                            )
-                          }
-                          style={{
-                            ...successButtonStyle,
-                            opacity:
-                              updating
-                                ? 0.6
-                                : 1,
-                          }}
-                        >
-                          {updating
-                            ? "Menyelesaikan..."
-                            : "Tandai Selesai"}
-                        </button>
-
-                        <button
-                          disabled={
-                            updating
-                          }
-                          onClick={() =>
-                            handleUpdateStatus(
-                              selectedOrder,
-                              "cancelled"
-                            )
-                          }
-                          style={{
-                            ...dangerButtonStyle,
-                            opacity:
-                              updating
-                                ? 0.6
-                                : 1,
-                          }}
-                        >
-                          Batalkan
-                        </button>
-                      </>
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        {updating
+                          ? "Menyelesaikan..."
+                          : "Tandai Selesai"}
+                      </button>
                     )}
 
-                    {/* SUDAH SELESAI */}
+                    {/* ==========================================
+                        SUDAH SELESAI
+                    ========================================== */}
+
                     {String(
                       selectedOrder.status
                     ).toLowerCase() ===
@@ -1310,6 +1306,34 @@ function OrdersPage() {
                           ✓ Pesanan selesai dan pembayaran sudah dikonfirmasi.
                         </div>
                       )}
+
+                    {/* ==========================================
+                        DIBATALKAN
+                    ========================================== */}
+
+                    {String(
+                      selectedOrder.status
+                    ).toLowerCase() ===
+                      "cancelled" && (
+                      <div
+                        style={{
+                          width:
+                            "100%",
+                          background:
+                            "#f8d7da",
+                          color:
+                            "#842029",
+                          padding:
+                            "13px 15px",
+                          borderRadius:
+                            "8px",
+                          fontWeight:
+                            "600",
+                        }}
+                      >
+                        Pesanan ini telah dibatalkan.
+                      </div>
+                    )}
                   </div>
                 </>
               )}

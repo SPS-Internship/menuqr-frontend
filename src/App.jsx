@@ -17,113 +17,109 @@ import OrdersPage from "./pages/admin/OrdersPage";
 import TablePage from "./pages/admin/TablePage";
 import PromoPage from "./pages/admin/PromoPage";
 
+import ProtectedRoute from "./components/admin/ProtectedRoute";
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+
         {/* =========================
             CUSTOMER
-            ========================= */}
+        ========================== */}
 
-        {/* Halaman utama */}
         <Route
           path="/"
           element={<MenuPage />}
         />
 
-        {/* Menu berdasarkan restoran */}
         <Route
           path="/menu/:slug"
           element={<MenuPage />}
         />
 
-        {/* Detail menu berdasarkan restoran + ID menu */}
         <Route
           path="/menu/:slug/:id"
           element={<MenuDetailPage />}
         />
 
-        {/* Keranjang */}
         <Route
           path="/cart"
           element={<CartPage />}
         />
 
-        {/* Pesanan */}
         <Route
           path="/order"
           element={<OrderPage />}
         />
 
         {/* =========================
-            ADMIN
-            ========================= */}
+            ADMIN LOGIN
+        ========================== */}
 
-        {/* Login */}
         <Route
-          path="/admin/login"
+          path="/admin/login/:slug"
           element={<LoginPage />}
         />
 
-        {/* Dashboard */}
-        <Route
-          path="/admin/dashboard"
-          element={<DashboardPage />}
-        />
+        {/* =========================
+            ADMIN YANG WAJIB LOGIN
+        ========================== */}
 
-        {/* Report */}
-        <Route
-          path="/admin/report"
-          element={<ReportPage />}
-        />
+        <Route element={<ProtectedRoute />}>
 
-        {/* Settings */}
-        <Route
-          path="/admin/settings"
-          element={<SettingsPage />}
-        />
+          <Route
+            path="/admin/dashboard"
+            element={<DashboardPage />}
+          />
 
-        {/* Menu Management */}
-        <Route
-          path="/admin/menu"
-          element={<MenuManagementPage />}
-        />
+          <Route
+            path="/admin/report"
+            element={<ReportPage />}
+          />
 
-        {/* Category */}
-        <Route
-          path="/admin/category"
-          element={<CategoryPage />}
-        />
+          <Route
+            path="/admin/settings"
+            element={<SettingsPage />}
+          />
 
-        {/* Variant */}
-        <Route
-          path="/admin/variant"
-          element={<VariantPage />}
-        />
+          <Route
+            path="/admin/menu"
+            element={<MenuManagementPage />}
+          />
 
-        {/* Addon */}
-        <Route
-          path="/admin/addon"
-          element={<AddonPage />}
-        />
+          <Route
+            path="/admin/category"
+            element={<CategoryPage />}
+          />
 
-        {/* Orders */}
-        <Route
-          path="/admin/orders"
-          element={<OrdersPage />}
-        />
+          <Route
+            path="/admin/variant"
+            element={<VariantPage />}
+          />
 
-        {/* Tables */}
-        <Route
-          path="/admin/tables"
-          element={<TablePage />}
-        />
+          <Route
+            path="/admin/addon"
+            element={<AddonPage />}
+          />
 
-        {/* Promo */}
-        <Route
-          path="/admin/promo"
-          element={<PromoPage />}
-        />
+          <Route
+            path="/admin/orders"
+            element={<OrdersPage />}
+          />
+
+          <Route
+            path="/admin/tables"
+            element={<TablePage />}
+          />
+
+          <Route
+            path="/admin/promo"
+            element={<PromoPage />}
+          />
+
+        </Route>
+
       </Routes>
     </BrowserRouter>
   );
