@@ -421,15 +421,6 @@ localStorage.setItem(
                 favoritmu lebih hemat.
               </h2>
 
-              <p>
-                Dapatkan diskon 20% untuk pembelian
-                minimal Rp50.000.
-              </p>
-
-              <div className="menu-promo-code">
-                KODE: <strong>RAMEN20</strong>
-              </div>
-
             </div>
 
             <div className="menu-promo-decoration">

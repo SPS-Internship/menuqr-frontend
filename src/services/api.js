@@ -3,7 +3,6 @@ import axios from "axios";
 const api = axios.create({
   baseURL: "http://127.0.0.1:8000/api",
   headers: {
-    "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
@@ -15,6 +14,13 @@ api.interceptors.request.use(
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Jika mengirim FormData, jangan paksa Content-Type menjadi JSON.
+    // Browser akan otomatis menentukan multipart/form-data
+    // beserta boundary yang diperlukan untuk upload file.
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
     }
 
     return config;

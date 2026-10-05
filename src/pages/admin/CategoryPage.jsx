@@ -380,8 +380,6 @@ function CategoryPage() {
               category?.restaurant_id ??
               category?.restaurant?.id;
 
-            // Jika data kategori mempunyai
-            // restaurant_id, wajib cocok.
             if (
               categoryRestaurantId !==
                 undefined &&
@@ -396,10 +394,6 @@ function CategoryPage() {
               );
             }
 
-            // Kalau endpoint admin sudah
-            // melakukan scope restoran dan
-            // restaurant_id tidak dikirim,
-            // tetap tampilkan data tersebut.
             return true;
           }
         );
@@ -430,9 +424,6 @@ function CategoryPage() {
               );
             }
 
-            // Kalau endpoint admin sudah
-            // melakukan scope restoran,
-            // tetap gunakan data tersebut.
             return true;
           }
         );
@@ -651,7 +642,6 @@ function CategoryPage() {
 
       setFormError("");
 
-      // Ambil restoran terbaru
       const restaurant =
         getActiveRestaurant();
 
@@ -686,9 +676,6 @@ function CategoryPage() {
       try {
         setSaving(true);
 
-        // Jangan percaya restaurant_id
-        // dari form.
-        // Gunakan restaurant yang sedang login.
         const categoryData = {
           restaurant_id:
             Number(
@@ -896,7 +883,6 @@ function CategoryPage() {
       try {
         setEditSaving(true);
 
-        // Gunakan restoran yang sedang login
         const categoryData = {
           restaurant_id:
             Number(
@@ -980,68 +966,6 @@ function CategoryPage() {
     };
 
   // ==================================================
-  // HAPUS KATEGORI
-  // ==================================================
-
-  const handleDeleteCategory =
-    async (category) => {
-      const confirmed =
-        window.confirm(
-          `Apakah kamu yakin ingin menghapus kategori "${category.name}"?`
-        );
-
-      if (!confirmed) return;
-
-      const restaurant =
-        getActiveRestaurant();
-
-      if (!restaurant?.id) {
-        alert(
-          "Restoran aktif tidak ditemukan."
-        );
-
-        return;
-      }
-
-      try {
-        setDeleting(true);
-
-        await deleteCategory(
-          category.id
-        );
-
-        await loadCategories(
-          restaurant
-        );
-
-        alert(
-          "Kategori berhasil dihapus."
-        );
-      } catch (error) {
-        console.error(
-          "Gagal menghapus kategori:",
-          error
-        );
-
-        if (
-          error.response?.data
-            ?.message
-        ) {
-          alert(
-            error.response.data
-              .message
-          );
-        } else {
-          alert(
-            "Gagal menghapus kategori. Silakan coba lagi."
-          );
-        }
-      } finally {
-        setDeleting(false);
-      }
-    };
-
-  // ==================================================
   // HITUNG JUMLAH MENU DALAM KATEGORI
   // ==================================================
 
@@ -1062,6 +986,8 @@ function CategoryPage() {
         const sameCategoryId =
           menuCategoryId !==
             undefined &&
+          menuCategoryId !==
+            null &&
           Number(
             menuCategoryId
           ) ===
@@ -1088,6 +1014,117 @@ function CategoryPage() {
       }
     ).length;
   };
+
+  // ==================================================
+  // HAPUS KATEGORI
+  // ==================================================
+
+  const handleDeleteCategory =
+    async (category) => {
+      const confirmed =
+        window.confirm(
+          `Apakah kamu yakin ingin menghapus kategori "${category.name}"?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      const restaurant =
+        getActiveRestaurant();
+
+      if (!restaurant?.id) {
+        alert(
+          "Restoran aktif tidak ditemukan."
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // CEK MENU TERLEBIH DAHULU
+      // ==================================================
+
+      const menuCount =
+        getMenuCount(category);
+
+      if (menuCount > 0) {
+        alert(
+          `Kategori "${category.name}" tidak dapat dihapus karena masih memiliki ${menuCount} menu.\n\n` +
+          `Silakan hapus atau pindahkan menu tersebut ke kategori lain terlebih dahulu.`
+        );
+
+        return;
+      }
+
+      try {
+        setDeleting(true);
+
+        await deleteCategory(
+          category.id
+        );
+
+        await loadCategories(
+          restaurant
+        );
+
+        alert(
+          "Kategori berhasil dihapus."
+        );
+      } catch (error) {
+        console.error(
+          "Gagal menghapus kategori:",
+          error
+        );
+
+        const status =
+          error.response?.status;
+
+        const message =
+          error.response?.data?.message ||
+          "";
+
+        const errorText =
+          error.response?.data?.error ||
+          "";
+
+        const fullErrorMessage =
+          `${message} ${errorText}`.toLowerCase();
+
+        // ==================================================
+        // KATEGORI MASIH DIGUNAKAN DATA LAIN
+        // ==================================================
+
+        if (
+          status === 409 ||
+          fullErrorMessage.includes(
+            "foreign key"
+          ) ||
+          fullErrorMessage.includes(
+            "integrity constraint violation"
+          ) ||
+          fullErrorMessage.includes(
+            "menus_category_id_foreign"
+          )
+        ) {
+          alert(
+            `Kategori "${category.name}" tidak dapat dihapus karena masih digunakan oleh data lain.`
+          );
+
+          return;
+        }
+
+        if (message) {
+          alert(message);
+        } else {
+          alert(
+            "Gagal menghapus kategori. Silakan coba lagi."
+          );
+        }
+      } finally {
+        setDeleting(false);
+      }
+    };
 
   // ==================================================
   // STATISTIK

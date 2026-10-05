@@ -8,7 +8,6 @@ import {
   deletePromo,
 } from "../../services/promoService";
 
-import { getRestaurants } from "../../services/restaurantService";
 
 function PromoStatusBadge({ status }) {
   const styles = {
@@ -200,7 +199,7 @@ function getErrorMessage(error) {
 
 function PromoPage() {
   const [promos, setPromos] = useState([]);
-  const [restaurants, setRestaurants] = useState([]);
+  const [adminRestaurant, setAdminRestaurant] = useState(null);
 
   const [activeTab, setActiveTab] = useState("Semua");
   const [search, setSearch] = useState("");
@@ -235,34 +234,80 @@ function PromoPage() {
   // FETCH DATA
   // =========================================================
 
+  const getCurrentAdminRestaurant = () => {
+    try {
+      const storedRestaurant =
+        localStorage.getItem("adminRestaurant");
+
+      const storedAdmin =
+        localStorage.getItem("adminUser");
+
+      const restaurant = storedRestaurant
+        ? JSON.parse(storedRestaurant)
+        : null;
+
+      const admin = storedAdmin
+        ? JSON.parse(storedAdmin)
+        : null;
+
+      return {
+        restaurant:
+          restaurant?.data ||
+          restaurant ||
+          null,
+        restaurantId:
+          restaurant?.data?.id ||
+          restaurant?.id ||
+          restaurant?.restaurant_id ||
+          admin?.restaurant_id ||
+          admin?.restaurant?.id ||
+          null,
+      };
+    } catch (error) {
+      console.error(
+        "Gagal membaca data restaurant admin:",
+        error
+      );
+
+      return {
+        restaurant: null,
+        restaurantId: null,
+      };
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       setErrorMessage("");
 
-      const [promoResponse, restaurantResponse] =
-        await Promise.all([
-          getPromos(),
-          getRestaurants(),
-        ]);
+      const { restaurant, restaurantId } =
+        getCurrentAdminRestaurant();
+
+      setAdminRestaurant(restaurant);
+
+      const promoResponse = await getPromos();
 
       const promoData =
         promoResponse?.data || promoResponse || [];
 
-      const restaurantData =
-        restaurantResponse?.data ||
-        restaurantResponse ||
-        [];
-
-      setPromos(
-        Array.isArray(promoData)
-          ? promoData
-          : []
+      const currentRestaurantId = Number(
+        restaurantId
       );
 
-      setRestaurants(
-        Array.isArray(restaurantData)
-          ? restaurantData
+      const filteredPromoData =
+        Array.isArray(promoData) &&
+        currentRestaurantId
+          ? promoData.filter(
+              (promo) =>
+                Number(promo.restaurant_id) ===
+                currentRestaurantId
+            )
+          : [];
+
+      setPromos(
+        Array.isArray(filteredPromoData)
+          ? filteredPromoData
           : []
       );
     } catch (error) {
@@ -313,11 +358,11 @@ function PromoPage() {
   const openAddModal = () => {
     setEditingPromo(null);
 
+    const { restaurantId } =
+      getCurrentAdminRestaurant();
+
     setForm({
-      restaurant_id:
-        restaurants.length > 0
-          ? restaurants[0].id
-          : "",
+      restaurant_id: restaurantId || "",
       name: "",
       code: "",
       is_active: true,
@@ -341,7 +386,9 @@ function PromoPage() {
 
     setForm({
       restaurant_id:
-        promo.restaurant_id || "",
+        getCurrentAdminRestaurant().restaurantId ||
+        promo.restaurant_id ||
+        "",
 
       // FIX:
       // Nama promo sekarang ikut dimasukkan
@@ -400,10 +447,13 @@ function PromoPage() {
 
     setErrorMessage("");
 
-    // Restaurant wajib dipilih
-    if (!form.restaurant_id) {
+    // Restaurant otomatis mengikuti akun admin
+    const { restaurantId } =
+      getCurrentAdminRestaurant();
+
+    if (!restaurantId) {
       setErrorMessage(
-        "Restaurant harus dipilih."
+        "Restaurant admin tidak ditemukan. Silakan login kembali."
       );
       return;
     }
@@ -484,7 +534,7 @@ function PromoPage() {
       // =====================================================
 
       const payload = {
-        restaurant_id: form.restaurant_id,
+        restaurant_id: restaurantId,
 
         // FIX:
         // name sekarang dikirim ke backend
@@ -1743,51 +1793,40 @@ function PromoPage() {
                     Restaurant
                   </label>
 
-                  <select
+                  <input
+                    type="text"
                     value={
-                      form.restaurant_id
+                      adminRestaurant?.name ||
+                      adminRestaurant?.nama ||
+                      adminRestaurant?.slug ||
+                      "Restaurant admin"
                     }
-                    onChange={(e) =>
-                      handleFormChange(
-                        "restaurant_id",
-                        e.target.value
-                      )
-                    }
+                    readOnly
                     style={{
                       width: "100%",
                       boxSizing: "border-box",
-                      padding: "10px",
+                      padding: "10px 12px",
                       border:
                         "1px solid #dddce4",
                       borderRadius: "5px",
-                      background: "#ffffff",
+                      background: "#f7f7fa",
+                      color: "#55545e",
                       fontSize: "12px",
                       outline: "none",
+                      cursor: "not-allowed",
                     }}
-                    required
-                  >
-                    <option value="">
-                      Pilih restaurant
-                    </option>
+                  />
 
-                    {restaurants.map(
-                      (restaurant) => (
-                        <option
-                          key={
-                            restaurant.id
-                          }
-                          value={
-                            restaurant.id
-                          }
-                        >
-                          {restaurant.name ||
-                            restaurant.nama ||
-                            restaurant.slug ||
-                            `Restaurant ${restaurant.id}`}
-                        </option>
-                      )
-                    )}
-                  </select>
+                  <span
+                    style={{
+                      display: "block",
+                      marginTop: "5px",
+                      color: "#9998a2",
+                      fontSize: "10px",
+                    }}
+                  >
+                    Restaurant otomatis mengikuti akun admin yang sedang login.
+                  </span>
                 </div>
 
                 {/* NAMA PROMO */}
@@ -1861,7 +1900,7 @@ function PromoPage() {
 
                   <input
                     type="text"
-                    placeholder="Contoh: RAMEN10"
+                    placeholder="Masukkan kode promo"
                     value={
                       form.code
                     }
@@ -1886,17 +1925,6 @@ function PromoPage() {
                     required
                   />
 
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: "5px",
-                      color: "#9998a2",
-                      fontSize: "10px",
-                    }}
-                  >
-                    Contoh: RAMEN10,
-                    LUNCH20, PAYDAY50.
-                  </span>
                 </div>
 
                 {/* TYPE + VALUE */}

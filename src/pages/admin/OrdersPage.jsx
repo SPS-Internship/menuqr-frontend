@@ -328,24 +328,39 @@ function OrdersPage() {
         newStatus
       );
 
-      // Jika pesanan selesai,
-      // otomatis ubah pembayaran menjadi paid
-      if (newStatus === "completed") {
+      // ==========================================
+      // JIKA PESANAN DIPROSES KE DAPUR
+      // PEMBAYARAN OTOMATIS MENJADI SUDAH DIBAYAR
+      // ==========================================
+      if (newStatus === "confirmed") {
         await updatePaymentStatus(
           order.id,
           "paid"
         );
       }
 
-      if (newStatus === "completed") {
+      // ==========================================
+      // PESANAN DIPROSES
+      // ==========================================
+      if (newStatus === "confirmed") {
         alert(
-          "Pesanan selesai dan pembayaran otomatis dikonfirmasi."
+          "Pesanan berhasil diproses ke dapur dan pembayaran sudah dikonfirmasi."
         );
-      } else if (newStatus === "confirmed") {
+      }
+
+      // ==========================================
+      // PESANAN SELESAI
+      // ==========================================
+      else if (newStatus === "completed") {
         alert(
-          "Pesanan berhasil diproses ke dapur."
+          "Pesanan berhasil diselesaikan."
         );
-      } else if (newStatus === "cancelled") {
+      }
+
+      // ==========================================
+      // PESANAN DIBATALKAN
+      // ==========================================
+      else if (newStatus === "cancelled") {
         alert(
           "Pesanan berhasil dibatalkan."
         );
@@ -1244,7 +1259,6 @@ function OrdersPage() {
                     {/* ==========================================
                         PESANAN DIPROSES
                         HANYA BISA DITANDAI SELESAI
-                        TIDAK ADA BUTTON BATALKAN
                     ========================================== */}
 
                     {String(
@@ -1277,6 +1291,7 @@ function OrdersPage() {
 
                     {/* ==========================================
                         SUDAH SELESAI
+                        PEMBAYARAN SUDAH DIBAYAR
                     ========================================== */}
 
                     {String(
@@ -1319,21 +1334,21 @@ function OrdersPage() {
                         style={{
                           width:
                             "100%",
-                          background:
-                            "#f8d7da",
-                          color:
-                            "#842029",
-                          padding:
-                            "13px 15px",
-                          borderRadius:
-                            "8px",
-                          fontWeight:
-                            "600",
-                        }}
-                      >
-                        Pesanan ini telah dibatalkan.
-                      </div>
-                    )}
+                            background:
+                              "#f8d7da",
+                            color:
+                              "#842029",
+                            padding:
+                              "13px 15px",
+                            borderRadius:
+                              "8px",
+                            fontWeight:
+                              "600",
+                          }}
+                        >
+                          Pesanan ini telah dibatalkan.
+                        </div>
+                      )}
                   </div>
                 </>
               )}
