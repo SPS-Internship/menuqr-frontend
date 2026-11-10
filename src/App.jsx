@@ -23,103 +23,52 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* =========================
             CUSTOMER
         ========================== */}
 
-        <Route
-          path="/"
-          element={<MenuPage />}
-        />
+        <Route path="/" element={<MenuPage />} />
 
-        <Route
-          path="/menu/:slug"
-          element={<MenuPage />}
-        />
+        <Route path="/menu/:slug" element={<MenuPage />} />
 
-        <Route
-          path="/menu/:slug/:id"
-          element={<MenuDetailPage />}
-        />
+        <Route path="/menu/:slug/:id" element={<MenuDetailPage />} />
 
-        <Route
-          path="/cart"
-          element={<CartPage />}
-        />
+        <Route path="/cart" element={<CartPage />} />
 
-        <Route
-          path="/order"
-          element={<OrderPage />}
-        />
+        <Route path="/order" element={<OrderPage />} />
 
         {/* =========================
             ADMIN LOGIN
         ========================== */}
 
-        <Route
-          path="/admin/login/:slug"
-          element={<LoginPage />}
-        />
+        <Route path="/admin/login/:slug" element={<LoginPage />} />
 
         {/* =========================
             ADMIN YANG WAJIB LOGIN
         ========================== */}
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/admin/dashboard" element={<DashboardPage />} />
 
-          <Route
-            path="/admin/dashboard"
-            element={<DashboardPage />}
-          />
+          <Route path="/admin/report" element={<ReportPage />} />
 
-          <Route
-            path="/admin/report"
-            element={<ReportPage />}
-          />
+          <Route path="/admin/settings" element={<SettingsPage />} />
 
-          <Route
-            path="/admin/settings"
-            element={<SettingsPage />}
-          />
+          <Route path="/admin/menu" element={<MenuManagementPage />} />
 
-          <Route
-            path="/admin/menu"
-            element={<MenuManagementPage />}
-          />
+          <Route path="/admin/category" element={<CategoryPage />} />
 
-          <Route
-            path="/admin/category"
-            element={<CategoryPage />}
-          />
+          <Route path="/admin/variant" element={<VariantPage />} />
 
-          <Route
-            path="/admin/variant"
-            element={<VariantPage />}
-          />
+          <Route path="/admin/addon" element={<AddonPage />} />
 
-          <Route
-            path="/admin/addon"
-            element={<AddonPage />}
-          />
+          <Route path="/admin/orders" element={<OrdersPage />} />
 
-          <Route
-            path="/admin/orders"
-            element={<OrdersPage />}
-          />
+          <Route path="/admin/tables" element={<TablePage />} />
 
-          <Route
-            path="/admin/tables"
-            element={<TablePage />}
-          />
-
-          <Route
-            path="/admin/promo"
-            element={<PromoPage />}
-          />
-
+          <Route path="/admin/promo" element={<PromoPage />} />
+          
         </Route>
-
       </Routes>
     </BrowserRouter>
   );

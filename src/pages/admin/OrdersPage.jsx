@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
+import api from "../../services/api";
 
 import {
   getOrders,
@@ -18,12 +19,14 @@ function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const [error, setError] = useState("");
 
   // =========================
   // LOAD ORDERS
   // =========================
+
   const loadOrders = async () => {
     try {
       setLoading(true);
@@ -38,9 +41,7 @@ function OrdersPage() {
         [];
 
       setOrders(
-        Array.isArray(orderData)
-          ? orderData
-          : []
+        Array.isArray(orderData) ? orderData : []
       );
     } catch (err) {
       setError(
@@ -207,6 +208,21 @@ function OrdersPage() {
   };
 
   // =========================
+  // SYARAT CETAK NOTA
+  // =========================
+
+  const canPrintReceipt = (order) => {
+    const isPaid =
+      String(order?.payment_status || "").toLowerCase() ===
+      "paid";
+
+    const isCancelled =
+      normalizeStatus(order?.status) === "Dibatalkan";
+
+    return isPaid && !isCancelled;
+  };
+
+  // =========================
   // FILTER
   // =========================
 
@@ -228,24 +244,15 @@ function OrdersPage() {
         customer.includes(keyword) ||
         table.includes(keyword);
 
-      const status = normalizeStatus(
-        order?.status
-      );
+      const status = normalizeStatus(order?.status);
 
       const matchStatus =
         statusFilter === "Semua" ||
         status === statusFilter;
 
-      return (
-        matchSearch &&
-        matchStatus
-      );
+      return matchSearch && matchStatus;
     });
-  }, [
-    orders,
-    search,
-    statusFilter,
-  ]);
+  }, [orders, search, statusFilter]);
 
   // =========================
   // STATISTIK
@@ -255,27 +262,23 @@ function OrdersPage() {
 
   const newOrders = orders.filter(
     (order) =>
-      normalizeStatus(order?.status) ===
-      "Baru"
+      normalizeStatus(order?.status) === "Baru"
   ).length;
 
   const processingOrders = orders.filter(
     (order) =>
-      normalizeStatus(order?.status) ===
-      "Diproses"
+      normalizeStatus(order?.status) === "Diproses"
   ).length;
 
   const completedOrders = orders.filter(
     (order) =>
-      normalizeStatus(order?.status) ===
-      "Selesai"
+      normalizeStatus(order?.status) === "Selesai"
   ).length;
 
   const unpaidOrders = orders.filter(
     (order) =>
-      String(
-        order?.payment_status
-      ).toLowerCase() === "unpaid"
+      String(order?.payment_status).toLowerCase() ===
+      "unpaid"
   ).length;
 
   // =========================
@@ -287,16 +290,14 @@ function OrdersPage() {
       setDetailLoading(true);
 
       const orderCode =
-        order?.order_code ||
-        order?.code;
+        order?.order_code || order?.code;
 
       if (!orderCode) {
         setSelectedOrder(order);
         return;
       }
 
-      const result =
-        await getOrderByCode(orderCode);
+      const result = await getOrderByCode(orderCode);
 
       const detail =
         result?.data ||
@@ -312,6 +313,127 @@ function OrdersPage() {
   };
 
   // =========================
+  // CETAK NOTA PDF
+  // =========================
+
+  const handlePrintReceipt = async (order) => {
+    let printWindow = null;
+    let pdfUrl = null;
+
+    try {
+      if (!order?.id) {
+        alert("ID pesanan tidak ditemukan.");
+        return;
+      }
+
+      // Buka tab secara langsung dari klik tombol
+      // agar tidak diblokir browser
+      printWindow = window.open("", "_blank");
+
+      if (!printWindow) {
+        alert(
+          "Browser memblokir halaman cetak. Izinkan pop-up untuk website ini."
+        );
+        return;
+      }
+
+      setPrinting(true);
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Memuat Nota</title>
+          </head>
+          <body style="
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 30px;
+          ">
+            Sedang memuat nota...
+          </body>
+        </html>
+      `);
+
+      // Ambil PDF menggunakan Axios
+      // Token admin otomatis dikirim oleh api.js
+      const response = await api.get(
+        `/orders/${order.id}/receipt`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const pdfBlob = new Blob(
+        [response.data],
+        {
+          type: "application/pdf",
+        }
+      );
+
+      if (pdfBlob.size === 0) {
+        throw new Error("File nota kosong.");
+      }
+
+      // Pastikan respons merupakan PDF
+      if (
+        response.data?.type &&
+        response.data.type !== "application/pdf"
+      ) {
+        throw new Error(
+          "Server tidak mengembalikan file PDF."
+        );
+      }
+
+      pdfUrl = URL.createObjectURL(pdfBlob);
+
+      // Tampilkan nota PDF pada tab baru
+      printWindow.location.replace(pdfUrl);
+
+      // Bersihkan URL setelah tab ditutup
+      const currentWindow = printWindow;
+
+      const cleanupInterval = window.setInterval(() => {
+        if (currentWindow.closed) {
+          URL.revokeObjectURL(pdfUrl);
+          window.clearInterval(cleanupInterval);
+        }
+      }, 1000);
+
+    } catch (err) {
+      console.error("Gagal mencetak nota:", err);
+
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
+
+      let errorMessage =
+        "Gagal mengambil nota. Silakan coba kembali.";
+
+      if (err.response?.data instanceof Blob) {
+        try {
+          const errorData = JSON.parse(
+            await err.response.data.text()
+          );
+
+          errorMessage =
+            errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error(parseError);
+        }
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  // =========================
   // UPDATE STATUS PESANAN
   // =========================
 
@@ -322,16 +444,13 @@ function OrdersPage() {
     try {
       setUpdating(true);
 
-      // Update status pesanan terlebih dahulu
       await updateOrderStatus(
         order.id,
         newStatus
       );
 
-      // ==========================================
-      // JIKA PESANAN DIPROSES KE DAPUR
-      // PEMBAYARAN OTOMATIS MENJADI SUDAH DIBAYAR
-      // ==========================================
+      // Pembayaran otomatis dikonfirmasi
+      // ketika pesanan diproses ke dapur
       if (newStatus === "confirmed") {
         await updatePaymentStatus(
           order.id,
@@ -339,31 +458,14 @@ function OrdersPage() {
         );
       }
 
-      // ==========================================
-      // PESANAN DIPROSES
-      // ==========================================
       if (newStatus === "confirmed") {
         alert(
           "Pesanan berhasil diproses ke dapur dan pembayaran sudah dikonfirmasi."
         );
-      }
-
-      // ==========================================
-      // PESANAN SELESAI
-      // ==========================================
-      else if (newStatus === "completed") {
-        alert(
-          "Pesanan berhasil diselesaikan."
-        );
-      }
-
-      // ==========================================
-      // PESANAN DIBATALKAN
-      // ==========================================
-      else if (newStatus === "cancelled") {
-        alert(
-          "Pesanan berhasil dibatalkan."
-        );
+      } else if (newStatus === "completed") {
+        alert("Pesanan berhasil diselesaikan.");
+      } else if (newStatus === "cancelled") {
+        alert("Pesanan berhasil dibatalkan.");
       }
 
       setSelectedOrder(null);
@@ -384,8 +486,7 @@ function OrdersPage() {
   // =========================
 
   const StatusBadge = ({ status }) => {
-    const normalized =
-      normalizeStatus(status);
+    const normalized = normalizeStatus(status);
 
     let background = "#f3f4f6";
     let color = "#374151";
@@ -432,12 +533,10 @@ function OrdersPage() {
   // =========================
 
   const PaymentBadge = ({ status }) => {
-    const normalized =
-      normalizePaymentStatus(status);
+    const normalized = normalizePaymentStatus(status);
 
     const paid =
-      String(status).toLowerCase() ===
-      "paid";
+      String(status).toLowerCase() === "paid";
 
     return (
       <span
@@ -445,12 +544,8 @@ function OrdersPage() {
           display: "inline-block",
           padding: "6px 10px",
           borderRadius: "20px",
-          backgroundColor: paid
-            ? "#d1e7dd"
-            : "#fff3cd",
-          color: paid
-            ? "#0f5132"
-            : "#856404",
+          backgroundColor: paid ? "#d1e7dd" : "#fff3cd",
+          color: paid ? "#0f5132" : "#856404",
           fontSize: "12px",
           fontWeight: "600",
         }}
@@ -481,15 +576,9 @@ function OrdersPage() {
           backgroundColor: "#f8f9fa",
         }}
       >
-        {/* =========================
-            HEADER
-        ========================= */}
+        {/* HEADER */}
 
-        <div
-          style={{
-            marginBottom: "25px",
-          }}
-        >
+        <div style={{ marginBottom: "25px" }}>
           <h2
             style={{
               margin: 0,
@@ -510,9 +599,7 @@ function OrdersPage() {
           </p>
         </div>
 
-        {/* =========================
-            STATISTIK
-        ========================= */}
+        {/* STATISTIK */}
 
         <div
           style={{
@@ -552,9 +639,7 @@ function OrdersPage() {
           />
         </div>
 
-        {/* =========================
-            SEARCH + FILTER
-        ========================= */}
+        {/* SEARCH + FILTER */}
 
         <div
           style={{
@@ -571,9 +656,7 @@ function OrdersPage() {
             type="text"
             placeholder="Cari pesanan, pelanggan, atau meja..."
             value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
+            onChange={(e) => setSearch(e.target.value)}
             style={{
               flex: 1,
               minWidth: "250px",
@@ -596,31 +679,15 @@ function OrdersPage() {
               background: "#fff",
             }}
           >
-            <option value="Semua">
-              Semua Status
-            </option>
-
-            <option value="Baru">
-              Baru
-            </option>
-
-            <option value="Diproses">
-              Diproses
-            </option>
-
-            <option value="Selesai">
-              Selesai
-            </option>
-
-            <option value="Dibatalkan">
-              Dibatalkan
-            </option>
+            <option value="Semua">Semua Status</option>
+            <option value="Baru">Baru</option>
+            <option value="Diproses">Diproses</option>
+            <option value="Selesai">Selesai</option>
+            <option value="Dibatalkan">Dibatalkan</option>
           </select>
         </div>
 
-        {/* =========================
-            ERROR
-        ========================= */}
+        {/* ERROR */}
 
         {error && (
           <div
@@ -636,17 +703,14 @@ function OrdersPage() {
           </div>
         )}
 
-        {/* =========================
-            TABLE
-        ========================= */}
+        {/* TABLE */}
 
         <div
           style={{
             background: "#fff",
             borderRadius: "12px",
             overflowX: "auto",
-            boxShadow:
-              "0 2px 10px rgba(0,0,0,0.05)",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
           }}
         >
           {loading ? (
@@ -684,150 +748,98 @@ function OrdersPage() {
                     color: "#fff",
                   }}
                 >
-                  <th style={thStyle}>
-                    Pesanan
-                  </th>
-
-                  <th style={thStyle}>
-                    Pelanggan
-                  </th>
-
-                  <th style={thStyle}>
-                    Meja
-                  </th>
-
-                  <th style={thStyle}>
-                    Item
-                  </th>
-
-                  <th style={thStyle}>
-                    Total
-                  </th>
-
-                  <th style={thStyle}>
-                    Status Pesanan
-                  </th>
-
-                  <th style={thStyle}>
-                    Pembayaran
-                  </th>
-
-                  <th style={thStyle}>
-                    Aksi
-                  </th>
+                  <th style={thStyle}>Pesanan</th>
+                  <th style={thStyle}>Pelanggan</th>
+                  <th style={thStyle}>Meja</th>
+                  <th style={thStyle}>Item</th>
+                  <th style={thStyle}>Total</th>
+                  <th style={thStyle}>Status Pesanan</th>
+                  <th style={thStyle}>Pembayaran</th>
+                  <th style={thStyle}>Aksi</th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredOrders.map(
-                  (order) => (
-                    <tr
-                      key={order.id}
-                      style={{
-                        borderBottom:
-                          "1px solid #eee",
-                      }}
-                    >
-                      <td style={tdStyle}>
-                        <strong>
-                          {getOrderCode(
-                            order
-                          )}
-                        </strong>
+                {filteredOrders.map((order) => (
+                  <tr
+                    key={order.id}
+                    style={{
+                      borderBottom: "1px solid #eee",
+                    }}
+                  >
+                    <td style={tdStyle}>
+                      <strong>{getOrderCode(order)}</strong>
 
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "#888",
-                            marginTop: "4px",
-                          }}
-                        >
-                          {formatTime(
-                            order.created_at
-                          )}
-                        </div>
-                      </td>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#888",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {formatTime(order.created_at)}
+                      </div>
+                    </td>
 
-                      <td style={tdStyle}>
-                        {getCustomerName(
-                          order
-                        )}
-                      </td>
+                    <td style={tdStyle}>
+                      {getCustomerName(order)}
+                    </td>
 
-                      <td style={tdStyle}>
-                        {getTableName(order)}
-                      </td>
+                    <td style={tdStyle}>
+                      {getTableName(order)}
+                    </td>
 
-                      <td style={tdStyle}>
-                        {getItemCount(order)}
-                      </td>
+                    <td style={tdStyle}>
+                      {getItemCount(order)}
+                    </td>
 
-                      <td style={tdStyle}>
-                        <strong>
-                          {formatRupiah(
-                            getTotal(order)
-                          )}
-                        </strong>
-                      </td>
+                    <td style={tdStyle}>
+                      <strong>
+                        {formatRupiah(getTotal(order))}
+                      </strong>
+                    </td>
 
-                      <td style={tdStyle}>
-                        <StatusBadge
-                          status={
-                            order.status
-                          }
-                        />
-                      </td>
+                    <td style={tdStyle}>
+                      <StatusBadge status={order.status} />
+                    </td>
 
-                      <td style={tdStyle}>
-                        <PaymentBadge
-                          status={
-                            order.payment_status
-                          }
-                        />
-                      </td>
+                    <td style={tdStyle}>
+                      <PaymentBadge
+                        status={order.payment_status}
+                      />
+                    </td>
 
-                      <td style={tdStyle}>
-                        <button
-                          onClick={() =>
-                            handleDetail(
-                              order
-                            )
-                          }
-                          style={{
-                            border: "none",
-                            background:
-                              "#800000",
-                            color: "#fff",
-                            padding:
-                              "8px 12px",
-                            borderRadius:
-                              "7px",
-                            cursor: "pointer",
-                            fontSize: "13px",
-                          }}
-                        >
-                          Detail
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
+                    <td style={tdStyle}>
+                      <button
+                        onClick={() => handleDetail(order)}
+                        style={{
+                          border: "none",
+                          background: "#800000",
+                          color: "#fff",
+                          padding: "8px 12px",
+                          borderRadius: "7px",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                        }}
+                      >
+                        Detail
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
 
-        {/* =========================
-            DETAIL MODAL
-        ========================= */}
+        {/* DETAIL MODAL */}
 
         {selectedOrder && (
           <div
             style={{
               position: "fixed",
               inset: 0,
-              background:
-                "rgba(0,0,0,0.5)",
+              background: "rgba(0,0,0,0.5)",
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
@@ -863,10 +875,8 @@ function OrdersPage() {
                   <div
                     style={{
                       display: "flex",
-                      justifyContent:
-                        "space-between",
-                      alignItems:
-                        "center",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                       marginBottom: "25px",
                     }}
                   >
@@ -874,10 +884,8 @@ function OrdersPage() {
                       <h4
                         style={{
                           margin: 0,
-                          fontWeight:
-                            "700",
-                          fontSize:
-                            "26px",
+                          fontWeight: "700",
+                          fontSize: "26px",
                         }}
                       >
                         Detail Pesanan
@@ -886,36 +894,24 @@ function OrdersPage() {
                       <div
                         style={{
                           color: "#777",
-                          marginTop:
-                            "6px",
-                          fontSize:
-                            "16px",
+                          marginTop: "6px",
+                          fontSize: "16px",
                         }}
                       >
-                        {getOrderCode(
-                          selectedOrder
-                        )}
+                        {getOrderCode(selectedOrder)}
                       </div>
                     </div>
 
                     <button
-                      onClick={() =>
-                        setSelectedOrder(
-                          null
-                        )
-                      }
+                      onClick={() => setSelectedOrder(null)}
                       style={{
                         border: "none",
-                        background:
-                          "#f1f1f1",
+                        background: "#f1f1f1",
                         width: "40px",
                         height: "40px",
-                        borderRadius:
-                          "50%",
-                        cursor:
-                          "pointer",
-                        fontSize:
-                          "20px",
+                        borderRadius: "50%",
+                        cursor: "pointer",
+                        fontSize: "20px",
                       }}
                     >
                       ×
@@ -930,31 +926,24 @@ function OrdersPage() {
                       gridTemplateColumns:
                         "repeat(2, minmax(0, 1fr))",
                       gap: "16px",
-                      marginBottom:
-                        "22px",
+                      marginBottom: "22px",
                     }}
                   >
                     <InfoBox
                       label="Pelanggan"
-                      value={getCustomerName(
-                        selectedOrder
-                      )}
+                      value={getCustomerName(selectedOrder)}
                     />
 
                     <InfoBox
                       label="Meja"
-                      value={getTableName(
-                        selectedOrder
-                      )}
+                      value={getTableName(selectedOrder)}
                     />
 
                     <InfoBox
                       label="Status Pesanan"
                       value={
                         <StatusBadge
-                          status={
-                            selectedOrder.status
-                          }
+                          status={selectedOrder.status}
                         />
                       }
                     />
@@ -963,9 +952,7 @@ function OrdersPage() {
                       label="Status Pembayaran"
                       value={
                         <PaymentBadge
-                          status={
-                            selectedOrder.payment_status
-                          }
+                          status={selectedOrder.payment_status}
                         />
                       }
                     />
@@ -976,38 +963,24 @@ function OrdersPage() {
                   {selectedOrder.note && (
                     <div
                       style={{
-                        background:
-                          "#f8f9fa",
-                        padding:
-                          "15px 16px",
-                        borderRadius:
-                          "9px",
-                        marginBottom:
-                          "24px",
+                        background: "#f8f9fa",
+                        padding: "15px 16px",
+                        borderRadius: "9px",
+                        marginBottom: "24px",
                       }}
                     >
-                      <strong
-                        style={{
-                          fontSize:
-                            "16px",
-                        }}
-                      >
+                      <strong style={{ fontSize: "16px" }}>
                         Catatan:
                       </strong>
 
                       <div
                         style={{
-                          marginTop:
-                            "7px",
-                          color:
-                            "#555",
-                          fontSize:
-                            "16px",
+                          marginTop: "7px",
+                          color: "#555",
+                          fontSize: "16px",
                         }}
                       >
-                        {
-                          selectedOrder.note
-                        }
+                        {selectedOrder.note}
                       </div>
                     </div>
                   )}
@@ -1016,12 +989,9 @@ function OrdersPage() {
 
                   <h5
                     style={{
-                      fontWeight:
-                        "700",
-                      fontSize:
-                        "21px",
-                      marginBottom:
-                        "14px",
+                      fontWeight: "700",
+                      fontSize: "21px",
+                      marginBottom: "14px",
                     }}
                   >
                     Detail Item
@@ -1029,115 +999,70 @@ function OrdersPage() {
 
                   <div
                     style={{
-                      border:
-                        "1px solid #e5e5e5",
-                      borderRadius:
-                        "10px",
-                      overflow:
-                        "hidden",
-                      marginBottom:
-                        "22px",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                      marginBottom: "22px",
                     }}
                   >
-                    {Array.isArray(
-                      selectedOrder.items
-                    ) &&
-                    selectedOrder.items
-                      .length > 0 ? (
-                      selectedOrder.items.map(
-                        (item, index) => (
+                    {Array.isArray(selectedOrder.items) &&
+                    selectedOrder.items.length > 0 ? (
+                      selectedOrder.items.map((item, index) => (
+                        <div
+                          key={item.id || index}
+                          style={{
+                            padding: "16px",
+                            borderBottom:
+                              index <
+                              selectedOrder.items.length - 1
+                                ? "1px solid #eee"
+                                : "none",
+                          }}
+                        >
                           <div
-                            key={
-                              item.id ||
-                              index
-                            }
                             style={{
-                              padding:
-                                "16px",
-                              borderBottom:
-                                index <
-                                selectedOrder
-                                  .items
-                                  .length -
-                                  1
-                                  ? "1px solid #eee"
-                                  : "none",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "15px",
                             }}
                           >
-                            <div
-                              style={{
-                                display:
-                                  "flex",
-                                justifyContent:
-                                  "space-between",
-                                alignItems:
-                                  "center",
-                                gap: "15px",
-                              }}
-                            >
-                              <div>
-                                <strong
-                                  style={{
-                                    fontSize:
-                                      "16px",
-                                  }}
-                                >
-                                  {item
-                                    ?.menu
-                                    ?.name ||
-                                    item?.menu_name ||
-                                    item?.name ||
-                                    "Menu"}
-                                </strong>
+                            <div>
+                              <strong style={{ fontSize: "16px" }}>
+                                {item?.menu?.name ||
+                                  item?.menu_name ||
+                                  item?.name ||
+                                  "Menu"}
+                              </strong>
 
-                                <div
-                                  style={{
-                                    fontSize:
-                                      "14px",
-                                    color:
-                                      "#777",
-                                    marginTop:
-                                      "5px",
-                                  }}
-                                >
-                                  x
-                                  {item?.quantity ||
-                                    1}
-                                </div>
-                              </div>
-
-                              <strong
+                              <div
                                 style={{
-                                  fontSize:
-                                    "16px",
+                                  fontSize: "14px",
+                                  color: "#777",
+                                  marginTop: "5px",
                                 }}
                               >
-                                {formatRupiah(
-                                  item?.subtotal ||
-                                    item?.total ||
-                                    Number(
-                                      item?.price ||
-                                        0
-                                    ) *
-                                      Number(
-                                        item?.quantity ||
-                                          1
-                                      )
-                                )}
-                              </strong>
+                                x{item?.quantity || 1}
+                              </div>
                             </div>
+
+                            <strong style={{ fontSize: "16px" }}>
+                              {formatRupiah(
+                                item?.subtotal ||
+                                  item?.total ||
+                                  Number(item?.price || 0) *
+                                    Number(item?.quantity || 1)
+                              )}
+                            </strong>
                           </div>
-                        )
-                      )
+                        </div>
+                      ))
                     ) : (
                       <div
                         style={{
-                          padding:
-                            "20px",
-                          textAlign:
-                            "center",
-                          color:
-                            "#777",
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#777",
                         }}
                       >
                         Detail item tidak tersedia.
@@ -1149,42 +1074,25 @@ function OrdersPage() {
 
                   <div
                     style={{
-                      display:
-                        "flex",
-                      justifyContent:
-                        "space-between",
-                      alignItems:
-                        "center",
-                      padding:
-                        "18px 0",
-                      borderTop:
-                        "1px solid #ddd",
-                      marginBottom:
-                        "22px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "18px 0",
+                      borderTop: "1px solid #ddd",
+                      marginBottom: "22px",
                     }}
                   >
-                    <strong
-                      style={{
-                        fontSize:
-                          "18px",
-                      }}
-                    >
+                    <strong style={{ fontSize: "18px" }}>
                       Total
                     </strong>
 
                     <strong
                       style={{
-                        fontSize:
-                          "22px",
-                        color:
-                          "#800000",
+                        fontSize: "22px",
+                        color: "#800000",
                       }}
                     >
-                      {formatRupiah(
-                        getTotal(
-                          selectedOrder
-                        )
-                      )}
+                      {formatRupiah(getTotal(selectedOrder))}
                     </strong>
                   </div>
 
@@ -1192,28 +1100,20 @@ function OrdersPage() {
 
                   <div
                     style={{
-                      display:
-                        "flex",
+                      display: "flex",
                       gap: "10px",
-                      flexWrap:
-                        "wrap",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      paddingTop: "5px",
                     }}
                   >
-                    {/* ==========================================
-                        PESANAN BARU
-                        BISA PROSES KE DAPUR
-                        DAN BISA DIBATALKAN
-                    ========================================== */}
+                    {/* PESANAN BARU */}
 
-                    {String(
-                      selectedOrder.status
-                    ).toLowerCase() ===
+                    {String(selectedOrder.status).toLowerCase() ===
                       "pending" && (
                       <>
                         <button
-                          disabled={
-                            updating
-                          }
+                          disabled={updating}
                           onClick={() =>
                             handleUpdateStatus(
                               selectedOrder,
@@ -1222,10 +1122,7 @@ function OrdersPage() {
                           }
                           style={{
                             ...primaryButtonStyle,
-                            opacity:
-                              updating
-                                ? 0.6
-                                : 1,
+                            opacity: updating ? 0.6 : 1,
                           }}
                         >
                           {updating
@@ -1234,9 +1131,7 @@ function OrdersPage() {
                         </button>
 
                         <button
-                          disabled={
-                            updating
-                          }
+                          disabled={updating}
                           onClick={() =>
                             handleUpdateStatus(
                               selectedOrder,
@@ -1245,10 +1140,7 @@ function OrdersPage() {
                           }
                           style={{
                             ...dangerButtonStyle,
-                            opacity:
-                              updating
-                                ? 0.6
-                                : 1,
+                            opacity: updating ? 0.6 : 1,
                           }}
                         >
                           Batalkan
@@ -1256,19 +1148,12 @@ function OrdersPage() {
                       </>
                     )}
 
-                    {/* ==========================================
-                        PESANAN DIPROSES
-                        HANYA BISA DITANDAI SELESAI
-                    ========================================== */}
+                    {/* PESANAN DIPROSES */}
 
-                    {String(
-                      selectedOrder.status
-                    ).toLowerCase() ===
+                    {String(selectedOrder.status).toLowerCase() ===
                       "confirmed" && (
                       <button
-                        disabled={
-                          updating
-                        }
+                        disabled={updating}
                         onClick={() =>
                           handleUpdateStatus(
                             selectedOrder,
@@ -1277,10 +1162,7 @@ function OrdersPage() {
                         }
                         style={{
                           ...successButtonStyle,
-                          opacity:
-                            updating
-                              ? 0.6
-                              : 1,
+                          opacity: updating ? 0.6 : 1,
                         }}
                       >
                         {updating
@@ -1289,66 +1171,87 @@ function OrdersPage() {
                       </button>
                     )}
 
-                    {/* ==========================================
-                        SUDAH SELESAI
-                        PEMBAYARAN SUDAH DIBAYAR
-                    ========================================== */}
+                    {/* PESANAN SELESAI */}
 
-                    {String(
-                      selectedOrder.status
-                    ).toLowerCase() ===
+                    {String(selectedOrder.status).toLowerCase() ===
                       "completed" &&
                       String(
                         selectedOrder.payment_status
-                      ).toLowerCase() ===
-                        "paid" && (
+                      ).toLowerCase() === "paid" && (
                         <div
                           style={{
-                            width:
-                              "100%",
-                            background:
-                              "#d1e7dd",
-                            color:
-                              "#0f5132",
-                            padding:
-                              "13px 15px",
-                            borderRadius:
-                              "8px",
-                            fontWeight:
-                              "600",
+                            width: "100%",
+                            background: "#d1e7dd",
+                            color: "#0f5132",
+                            padding: "13px 15px",
+                            borderRadius: "8px",
+                            fontWeight: "600",
                           }}
                         >
                           ✓ Pesanan selesai dan pembayaran sudah dikonfirmasi.
                         </div>
                       )}
 
-                    {/* ==========================================
-                        DIBATALKAN
-                    ========================================== */}
+                    {/* PESANAN DIBATALKAN */}
 
-                    {String(
-                      selectedOrder.status
-                    ).toLowerCase() ===
-                      "cancelled" && (
+                    {normalizeStatus(selectedOrder.status) ===
+                      "Dibatalkan" && (
                       <div
                         style={{
-                          width:
-                            "100%",
-                            background:
-                              "#f8d7da",
-                            color:
-                              "#842029",
-                            padding:
-                              "13px 15px",
-                            borderRadius:
-                              "8px",
-                            fontWeight:
-                              "600",
+                          width: "100%",
+                          background: "#f8d7da",
+                          color: "#842029",
+                          padding: "13px 15px",
+                          borderRadius: "8px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        Pesanan ini telah dibatalkan. Nota tidak tersedia.
+                      </div>
+                    )}
+
+                    {/* BELUM DIBAYAR */}
+
+                    {!canPrintReceipt(selectedOrder) &&
+                      normalizeStatus(selectedOrder.status) !==
+                        "Dibatalkan" && (
+                        <div
+                          style={{
+                            width: "100%",
+                            background: "#fff3cd",
+                            color: "#856404",
+                            padding: "13px 15px",
+                            borderRadius: "8px",
+                            fontWeight: "600",
                           }}
                         >
-                          Pesanan ini telah dibatalkan.
+                          Nota dapat dicetak setelah pembayaran dikonfirmasi.
                         </div>
                       )}
+
+                    {/* CETAK NOTA */}
+
+                    {canPrintReceipt(selectedOrder) && (
+                      <button
+                        type="button"
+                        disabled={printing}
+                        onClick={() =>
+                          handlePrintReceipt(selectedOrder)
+                        }
+                        style={{
+                          ...receiptButtonStyle,
+                          marginLeft: "auto",
+                          opacity: printing ? 0.6 : 1,
+                          cursor: printing
+                            ? "not-allowed"
+                            : "pointer",
+                        }}
+                      >
+                        {printing
+                          ? "Memuat Nota..."
+                          : "🖨 Cetak Nota"}
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -1375,8 +1278,7 @@ function StatCard({
         background: "#fff",
         padding: "20px",
         borderRadius: "12px",
-        boxShadow:
-          "0 2px 10px rgba(0,0,0,0.05)",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
       }}
     >
       <div
@@ -1482,6 +1384,19 @@ const dangerButtonStyle = {
   borderRadius: "8px",
   cursor: "pointer",
   fontWeight: "600",
+};
+
+const receiptButtonStyle = {
+  border: "none",
+  background: "#800000",
+  color: "#fff",
+  padding: "11px 17px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: "700",
+  fontSize: "13px",
+  boxShadow: "0 3px 8px rgba(128, 0, 0, 0.15)",
+  transition: "all 0.2s ease",
 };
 
 export default OrdersPage;
